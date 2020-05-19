@@ -35,7 +35,8 @@ lazy val jasyncModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
 lazy val asyncModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
   `quill-async`, `quill-async-mysql`, `quill-async-postgres`,
   `quill-finagle-mysql`, `quill-finagle-postgres`,
-  `quill-ndbc`, `quill-ndbc-postgres`, `quill-ndbc-monix`
+  `quill-ndbc`, `quill-ndbc-postgres`, `quill-ndbc-monix`,
+  `quill-zio`, `quill-jdbc-zio`
 ) ++ jasyncModules
 
 lazy val codegenModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
@@ -114,8 +115,8 @@ val filteredModules = {
 lazy val `quill` = {
   val quill =
     (project in file("."))
-      .settings(commonSettings: _*)
-      .settings(`tut-settings`:_*)
+    .settings(commonSettings: _*)
+    .settings(`tut-settings`:_*)
 
   // Do not do aggregate project builds when debugging since during that time
   // typically only individual modules are being build/compiled. This is mostly for convenience with IntelliJ.
@@ -365,7 +366,6 @@ lazy val `quill-jdbc` =
 
 lazy val `quill-monix` =
   (project in file("quill-monix"))
-
     .settings(commonSettings: _*)
     .settings(mimaSettings: _*)
     .settings(
@@ -397,6 +397,42 @@ lazy val `quill-jdbc-monix` =
     .dependsOn(`quill-monix` % "compile->compile;test->test")
     .dependsOn(`quill-sql-jvm` % "compile->compile;test->test")
     .dependsOn(`quill-jdbc` % "compile->compile;test->test")
+
+lazy val `quill-zio` =
+  (project in file("quill-zio"))
+    .settings(commonSettings: _*)
+    .settings(mimaSettings: _*)
+    .settings(
+      fork in Test := true,
+      libraryDependencies ++= Seq(
+        "dev.zio" %% "zio" % "1.0.3",
+        "dev.zio" %% "zio-streams" % "1.0.3"
+      )
+    )
+    .dependsOn(`quill-core-jvm` % "compile->compile;test->test")
+
+lazy val `quill-jdbc-zio` =
+  (project in file("quill-jdbc-zio"))
+    .settings(commonSettings: _*)
+    .settings(mimaSettings: _*)
+    .settings(jdbcTestingSettings: _*)
+    .settings(
+      testGrouping in Test := {
+        (definedTests in Test).value map { test =>
+          if (test.name endsWith "IntegrationSpec")
+            Tests.Group(name = test.name, tests = Seq(test), runPolicy = Tests.SubProcess(
+              ForkOptions().withRunJVMOptions(Vector("-Xmx200m"))
+            ))
+          else
+            Tests.Group(name = test.name, tests = Seq(test), runPolicy = Tests.SubProcess(ForkOptions()))
+        }
+      }
+    )
+    .dependsOn(`quill-zio` % "compile->compile;test->test")
+    .dependsOn(`quill-sql-jvm` % "compile->compile;test->test")
+    .dependsOn(`quill-jdbc` % "compile->compile;test->test")
+
+
 
 lazy val `quill-ndbc-monix` =
   (project in file("quill-ndbc-monix"))

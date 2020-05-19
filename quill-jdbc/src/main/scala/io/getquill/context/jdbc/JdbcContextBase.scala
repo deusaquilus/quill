@@ -6,10 +6,17 @@ import io.getquill._
 import io.getquill.ReturnAction._
 import io.getquill.context.sql.SqlContext
 import io.getquill.context.sql.idiom.SqlIdiom
-import io.getquill.context.{ Context, ContextEffect }
+import io.getquill.context.{ Context, ContextEffect, SimplePrepareContext }
 import io.getquill.util.ContextLogger
 
-trait JdbcContextBase[Dialect <: SqlIdiom, Naming <: NamingStrategy]
+trait JdbcContextBase[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends JdbcContextSimplified[Dialect, Naming]
+  with SimplePrepareContext {
+  def constructPrepareQuery(f: Connection => Result[PreparedStatement]): Connection => Result[PreparedStatement] = f
+  def constructPrepareAction(f: Connection => Result[PreparedStatement]): Connection => Result[PreparedStatement] = f
+  def constructPrepareBatchAction(f: Connection => Result[List[PreparedStatement]]): Connection => Result[List[PreparedStatement]] = f
+}
+
+trait JdbcContextSimplified[Dialect <: SqlIdiom, Naming <: NamingStrategy]
   extends Context[Dialect, Naming]
   with SqlContext[Dialect, Naming]
   with Encoders
@@ -91,11 +98,15 @@ trait JdbcContextBase[Dialect <: SqlIdiom, Naming <: NamingStrategy]
       }
     }
 
-  def prepareQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): Connection => Result[PreparedStatement] =
-    prepareSingle(sql, prepare)
+  def constructPrepareQuery(f: Connection => Result[PreparedStatement]): PrepareQueryResult
+  def constructPrepareAction(f: Connection => Result[PreparedStatement]): PrepareActionResult
+  def constructPrepareBatchAction(f: Connection => Result[List[PreparedStatement]]): PrepareBatchActionResult
 
-  def prepareAction(sql: String, prepare: Prepare = identityPrepare): Connection => Result[PreparedStatement] =
-    prepareSingle(sql, prepare)
+  def prepareQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): PrepareQueryResult =
+    constructPrepareQuery(prepareSingle(sql, prepare))
+
+  def prepareAction(sql: String, prepare: Prepare = identityPrepare): PrepareActionResult =
+    constructPrepareAction(prepareSingle(sql, prepare))
 
   def prepareSingle(sql: String, prepare: Prepare = identityPrepare): Connection => Result[PreparedStatement] =
     (conn: Connection) => wrap {
@@ -104,19 +115,21 @@ trait JdbcContextBase[Dialect <: SqlIdiom, Naming <: NamingStrategy]
       ps
     }
 
-  def prepareBatchAction(groups: List[BatchGroup]): Connection => Result[List[PreparedStatement]] =
-    (session: Connection) =>
-      seq {
-        val batches = groups.flatMap {
-          case BatchGroup(sql, prepares) =>
-            prepares.map(sql -> _)
+  def prepareBatchAction(groups: List[BatchGroup]): PrepareBatchActionResult =
+    constructPrepareBatchAction {
+      (session: Connection) =>
+        seq {
+          val batches = groups.flatMap {
+            case BatchGroup(sql, prepares) =>
+              prepares.map(sql -> _)
+          }
+          batches.map {
+            case (sql, prepare) =>
+              val prepareSql = prepareSingle(sql, prepare)
+              prepareSql(session)
+          }
         }
-        batches.map {
-          case (sql, prepare) =>
-            val prepareSql = prepareAction(sql, prepare)
-            prepareSql(session)
-        }
-      }
+    }
 
   protected def handleSingleWrappedResult[T](list: Result[List[T]]): Result[T] =
     push(list)(handleSingleResult(_))
