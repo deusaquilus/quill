@@ -300,3 +300,43 @@ class and it will be hit during the runtime of your application.
 > NOTE: In situations where the .dynamically keyword is not available, e.g. when the 
 > quoted construct is not a query, add a type annotation to the variable holding the
 > quotation and this will effectively cause the same behavior.
+
+## Trying out a Snapshot Build
+
+### Snapshot of Master
+
+The latest snapshot rebuild of Quill master is available in the Nexus OSS repo:
+```
+https://oss.sonatype.org/service/local/repositories/snapshots/content/
+```
+
+For example, you should be able to find quill-jdbc of `3.6.0-SNAPSHOT` here:
+```
+https://oss.sonatype.org/service/local/repositories/snapshots/content/io/getquill/quill-jdbc_2.12/3.6.0-SNAPSHOT/quill-jdbc_2.12-3.6.0-SNAPSHOT.jar
+```
+To be able to use these artifacts in your SBT build, add the following:
+```
+resolvers += ("OSS-Snapshots" at "https://oss.sonatype.org/service/local/repositories/snapshots/content/")
+```
+Then you can add the library as a dependency:
+```
+libraryDependencies += ("io.getquill" %% "quill-jdbc" % "3.6.0-SNAPSHOT")
+```
+
+### Shapshot of a Branch
+
+Any branch that is pushed to getquill/quill will be built as a snapshot and uploaded
+to the Nexus OSS snapshot repository. 
+
+For example, a branch called `quats_dynamic` should have quill-jdbc (of Scala 2.12) available here:
+```
+https://oss.sonatype.org/service/local/repositories/snapshots/content/io/getquill/quill-jdbc_2.12/quats_dynamic-SNAPSHOT/quill-jdbc_2.12-quats_dynamic-SNAPSHOT.jar
+```
+To be able to use these artifacts in your SBT build, add the following:
+```
+resolvers += ("OSS-Snapshots" at "https://oss.sonatype.org/service/local/repositories/snapshots/content/")
+```
+Then you can add the library as a dependency:
+```
+libraryDependencies += ("io.getquill" %% "quill-jdbc" % "quats_dynamic-SNAPSHOT")
+```
