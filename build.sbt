@@ -10,6 +10,7 @@ enablePlugins(TutPlugin)
 
 val CodegenTag = Tags.Tag("CodegenTag")
 (concurrentRestrictions in Global) += Tags.exclusive(CodegenTag)
+(concurrentRestrictions in Global) += Tags.limit(ScalaJSTags.Link, 2)
 
 lazy val jsModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
   `quill-core-portable-js`, `quill-core-js`,
@@ -237,7 +238,7 @@ lazy val `quill-sql-portable` =
         "com.github.vertical-blank" %%% "scala-sql-formatter" % "1.0.0"
       ),
       scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-      coverageExcludedPackages := ".*"//,
+      coverageExcludedPackages := ".*"
       //jsEnv := NodeJSEnv(args = Seq("--max_old_space_size=1024")).value
     )
     .dependsOn(`quill-core-portable` % "compile->compile")
