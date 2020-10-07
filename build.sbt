@@ -10,7 +10,7 @@ enablePlugins(TutPlugin)
 
 val CodegenTag = Tags.Tag("CodegenTag")
 (concurrentRestrictions in Global) += Tags.exclusive(CodegenTag)
-(concurrentRestrictions in Global) += Tags.limit(ScalaJSTags.Link, 2)
+(concurrentRestrictions in Global) += Tags.limit(ScalaJSTags.Link, 1)
 
 lazy val jsModules = Seq[sbt.ClasspathDep[sbt.ProjectReference]](
   `quill-core-portable-js`, `quill-core-js`,
