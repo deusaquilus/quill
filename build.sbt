@@ -193,7 +193,8 @@ lazy val `quill-core-portable` =
         "org.scala-js" %%% "scalajs-java-time" % "0.2.5",
         "io.suzaku" %%% "boopickle" % "1.3.1"
       ),
-      coverageExcludedPackages := ".*"
+      coverageExcludedPackages := ".*",
+      scalaJSOptimizerOptions in fastOptJS ~= { _.withDisableOptimizer(true) }
     )
 
 lazy val `quill-core-portable-jvm` = `quill-core-portable`.jvm
@@ -218,7 +219,8 @@ lazy val `quill-core` =
         "org.scala-js" %%% "scalajs-java-time" % "0.2.5"
       ),
       excludeFilter in unmanagedSources := new SimpleFileFilter(file => file.getName == "DynamicQuerySpec.scala"),
-      coverageExcludedPackages := ".*"
+      coverageExcludedPackages := ".*",
+      scalaJSOptimizerOptions in fastOptJS ~= { _.withDisableOptimizer(true) }
     )
     .dependsOn(`quill-core-portable` % "compile->compile")
 
@@ -238,7 +240,8 @@ lazy val `quill-sql-portable` =
         "com.github.vertical-blank" %%% "scala-sql-formatter" % "1.0.0"
       ),
       scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-      coverageExcludedPackages := ".*"
+      coverageExcludedPackages := ".*",
+      scalaJSOptimizerOptions in fastOptJS ~= { _.withDisableOptimizer(true) }
       //jsEnv := NodeJSEnv(args = Seq("--max_old_space_size=1024")).value
     )
     .dependsOn(`quill-core-portable` % "compile->compile")
@@ -260,7 +263,8 @@ lazy val `quill-sql` =
         "com.github.vertical-blank" %%% "scala-sql-formatter" % "1.0.1"
       ),
       scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-      coverageExcludedPackages := ".*"
+      coverageExcludedPackages := ".*",
+      scalaJSOptimizerOptions in fastOptJS ~= { _.withDisableOptimizer(true) }
     )
     .dependsOn(
       `quill-sql-portable` % "compile->compile",
@@ -828,8 +832,8 @@ lazy val basicSettings = Seq(
           "-Xfuture",
           "-deprecation",
           "-Yno-adapted-args",
-          "-Ywarn-unused:imports"//,
-          //"-Ycache-macro-class-loader:last-modified"
+          "-Ywarn-unused:imports",
+          "-Ycache-macro-class-loader:last-modified"
         )
       case _ => Seq()
     }
