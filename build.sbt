@@ -828,8 +828,8 @@ lazy val basicSettings = Seq(
           "-Xfuture",
           "-deprecation",
           "-Yno-adapted-args",
-          "-Ywarn-unused:imports",
-          "-Ycache-macro-class-loader:last-modified"
+          "-Ywarn-unused:imports"//,
+          //"-Ycache-macro-class-loader:last-modified"
         )
       case _ => Seq()
     }
