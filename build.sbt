@@ -89,6 +89,9 @@ val filteredModules = {
     case Some("codegen") =>
       println("Compiling Code Generator Modules")
       codegenModules
+    case Some("nocodegen") =>
+      println("Compiling Code Generator Modules")
+      baseModules ++ jsModules ++ dbModules ++ asyncModules ++ bigdataModules
     case Some("bigdata") =>
       println("Compiling Big Data Modules")
       bigdataModules

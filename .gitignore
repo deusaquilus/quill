@@ -35,3 +35,4 @@ nohup.out
 project/.bloop/
 /io/
 /.metadata/
+.bsp/

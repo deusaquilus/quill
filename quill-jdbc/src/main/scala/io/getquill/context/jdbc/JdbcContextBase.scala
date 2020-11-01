@@ -6,11 +6,11 @@ import io.getquill._
 import io.getquill.ReturnAction._
 import io.getquill.context.sql.SqlContext
 import io.getquill.context.sql.idiom.SqlIdiom
-import io.getquill.context.{ Context, ContextEffect, SimplePrepareContext }
+import io.getquill.context.{ Context, ContextEffect, StagedPrepare, PrepareContext }
 import io.getquill.util.ContextLogger
 
 trait JdbcContextBase[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends JdbcContextSimplified[Dialect, Naming]
-  with SimplePrepareContext {
+  with StagedPrepare {
   def constructPrepareQuery(f: Connection => Result[PreparedStatement]): Connection => Result[PreparedStatement] = f
   def constructPrepareAction(f: Connection => Result[PreparedStatement]): Connection => Result[PreparedStatement] = f
   def constructPrepareBatchAction(f: Connection => Result[List[PreparedStatement]]): Connection => Result[List[PreparedStatement]] = f
@@ -20,7 +20,8 @@ trait JdbcContextSimplified[Dialect <: SqlIdiom, Naming <: NamingStrategy]
   extends Context[Dialect, Naming]
   with SqlContext[Dialect, Naming]
   with Encoders
-  with Decoders {
+  with Decoders
+  with PrepareContext {
   private[getquill] val logger = ContextLogger(classOf[JdbcContext[_, _]])
 
   override type PrepareRow = PreparedStatement
