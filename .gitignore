@@ -36,3 +36,4 @@ project/.bloop/
 /io/
 /.metadata/
 .bsp/
+.jvmopts
