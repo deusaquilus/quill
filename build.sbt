@@ -861,7 +861,7 @@ lazy val basicSettings = Seq(
         Seq("-Ypatmat-exhaust-depth", "40")
       case Some((2, 11)) =>
         Seq("-Xlint",
-          "-Xfatal-warnings",
+          //"-Xfatal-warnings",
           "-Xfuture",
           "-deprecation",
           "-Yno-adapted-args",
@@ -870,7 +870,7 @@ lazy val basicSettings = Seq(
         )
       case Some((2, 12)) =>
         Seq(
-          "-Xfatal-warnings",
+          //"-Xfatal-warnings",
           "-Xlint:-unused,_",
           "-Xfuture",
           "-deprecation",

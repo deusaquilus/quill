@@ -23,10 +23,10 @@ trait Runner extends ContextEffect[Runner.RIOConn] {
   def schedule[T](t: Task[T]): Runner.RIOConn[T] = t
   def boundary[T](t: Task[T]): Runner.RIOConn[T] = Task.yieldNow *> t
 
-  def catchAll[T](task: Runner.RIOConn[T]): ZIO[java.sql.Connection, Nothing, Any] = task.catchAll {
+  def catchAll[T, R](task: ZIO[R, Throwable, T]): ZIO[R, Nothing, Any] = task.catchAll {
     case _: SQLException              => Task.unit // TODO Log something. Can't have anything in the error channel... still needed
     case _: IndexOutOfBoundsException => Task.unit
-    case e                            => Task.die(e): ZIO[Any, Nothing, Unit]
+    case e                            => Task.die(e): ZIO[Any, Nothing, T]
   }
 
   /**
