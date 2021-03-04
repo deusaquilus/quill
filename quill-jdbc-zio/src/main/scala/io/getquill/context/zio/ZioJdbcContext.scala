@@ -11,7 +11,7 @@ import io.getquill.util.{ ContextLogger, LoadConfig }
 
 import javax.sql.DataSource
 import zio.Exit.{ Failure, Success }
-import zio.{ Chunk, ChunkBuilder, Has, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
+import zio.{ Chunk, ChunkBuilder, Has, IO, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
 import zio.stream.{ Stream, ZStream }
 import izumi.reflect.Tag
 
@@ -300,6 +300,29 @@ object ZioJdbcContext {
       blocking <- ZIO.service[Blocking.Service]
       result <- blocking.effectBlocking(mapping(from))
     } yield Has.allOf(result, blocking)).toLayerMany
+
+  def projectionWithEffect[From: Tag, To: Tag, Rest <: Has[_]: Tag, E: Tag](effect: (From, Rest) => IO[E, To]): ZLayer[Has[From] with Rest, E, Has[To] with Rest] =
+    (for {
+      from <- ZIO.service[From]
+      rest <- ZIO.environment[Rest]
+      result <- effect(from, rest)
+    } yield Has(result) ++ rest).toLayerMany
+
+  //  def projectWithEffect[Orig: Tag, From: Tag, To: Tag, Rest <: Has[_]: Tag, E: Tag](layer: ZLayer[Orig, E, Has[From] with Rest])(effect: (From, Rest) => IO[E, To]): ZLayer[Orig, E, Has[To] with Rest] = {
+  //    val p: ZLayer[Has[From] with Rest, E, Has[To] with Rest] = projectionWithEffect[From, To, Rest, E](effect)
+  //    layer >>> p
+  //  }
+
+  def projectWithEffect[Orig: Tag, From: Tag, To: Tag, R: Tag, E: Tag](layer: ZLayer[Orig, E, Has[From] with Has[R]])(effect: (From, Has[R]) => IO[E, To]): ZLayer[Orig, E, Has[To] with Has[R]] = {
+    val p: ZLayer[Has[From] with Has[R], E, Has[To] with Has[R]] = projectionWithEffect[From, To, Has[R], E](effect)
+    layer >>> p
+  }
+
+  def use1(qzio: ZLayer[BlockingJdbcContextConfig, Throwable, BlockingDataSource]): ZLayer[BlockingJdbcContextConfig, Throwable, BlockingConnection] =
+    projectWithEffect[BlockingJdbcContextConfig, DataSource, Connection, Blocking.Service, Throwable](qzio)((blockingDs, blocking) => blocking.get(blockingDs.getConnection))
+
+  private[getquill] val prefixToConfig2: ZLayer[BlockingPrefix, Throwable, BlockingConfig] =
+    projectionWithEffect[Prefix, Config, Blocking, Throwable]((from: Prefix, blocking: Blocking) => blocking.get.effectBlocking(LoadConfig(from.name)))
 
   private[getquill] val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] =
     mapGeneric[Prefix, Config]((from: Prefix) => LoadConfig(from.name))
