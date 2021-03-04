@@ -15,6 +15,8 @@ import zio.internal.Platform
 
 case class Person(name: String, age: Int)
 
+//object MyZioContext extends PostgresZioJdbcContext(Literal)
+
 object ZioTest {
 
   def main(args: Array[String]): Unit = {
