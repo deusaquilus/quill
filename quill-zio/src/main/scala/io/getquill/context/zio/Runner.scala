@@ -5,9 +5,10 @@ import java.sql.SQLException
 import io.getquill.context.ContextEffect
 import zio.{ Task, ZIO, RIO }
 import zio.internal.Executor
+import ZioContext._
 
 object Runner {
-  type RIOConn[T] = RIO[java.sql.Connection, T]
+  type RIOConn[T] = RIO[BlockingConnection, T]
 
   def default = new Runner {}
   def using(executor: Executor) = new Runner {
@@ -19,7 +20,7 @@ object Runner {
 trait Runner extends ContextEffect[Runner.RIOConn] {
   override def wrap[T](t: => T): Runner.RIOConn[T] = Task(t)
   override def push[A, B](result: Runner.RIOConn[A])(f: A => B): Runner.RIOConn[B] = result.map(f)
-  override def seq[A](list: List[Runner.RIOConn[A]]): Runner.RIOConn[List[A]] = ZIO.collectAll[java.sql.Connection, Throwable, A, List](list)
+  override def seq[A](list: List[Runner.RIOConn[A]]): Runner.RIOConn[List[A]] = ZIO.collectAll[BlockingConnection, Throwable, A, List](list)
   def schedule[T](t: Task[T]): Runner.RIOConn[T] = t
   def boundary[T](t: Task[T]): Runner.RIOConn[T] = Task.yieldNow *> t
 

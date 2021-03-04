@@ -42,23 +42,8 @@ object ZioTest {
     //runtime.unsafeRun(print)
 
 
-    val prefixToConfig = ZLayer.fromFunctionManyM { (str: String) => IO.effect(LoadConfig(str)) }
-    val configToDsConf = ZLayer.fromFunctionManyM { conf: Config => IO.effect(JdbcContextConfig(conf)) }
-    val dsConfToDs = ZLayer.fromFunctionManyM { jconf: JdbcContextConfig => IO.effect(jconf.dataSource) }
-    val dsToConn = ZLayer.fromAcquireReleaseMany(ZIO.environment[DataSource].mapEffect(_.getConnection).refineToOrDie[SQLException])(c => catchAll(RIO(c.close)))
 
 
-    def fromPrefixService[T](qzio: ZIO[Connection, Throwable, T]) =
-      qzio.provideLayer(prefixToConfig >>> configToDsConf >>> dsConfToDs >>> dsToConn)
-
-    def fromPrefix[T](qzio: ZIO[Connection, Throwable, T]) =
-      qzio.provideLayer(prefixToConfig >>> configToDsConf >>> dsConfToDs >>> dsToConn)
-    def fromConf[T](qzio: ZIO[Connection, Throwable, T]) =
-      qzio.provideLayer(configToDsConf >>> dsConfToDs >>> dsToConn)
-    def fromDsConf[T](qzio: ZIO[Connection, Throwable, T]) =
-      qzio.provideLayer(dsConfToDs >>> dsToConn)
-    def fromDs[T](qzio: ZIO[Connection, Throwable, T]) =
-      qzio.provideLayer(dsToConn)
 
 
 //    val svc: ZLayer[Any, Nothing, Prefix with Blocking] = Prefix.simple ++ zio.blocking.Blocking.live
