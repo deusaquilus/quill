@@ -11,7 +11,7 @@ import io.getquill.util.{ ContextLogger, LoadConfig }
 
 import javax.sql.DataSource
 import zio.Exit.{ Failure, Success }
-import zio.{ Chunk, ChunkBuilder, Has, IO, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
+import zio.{ Chunk, ChunkBuilder, Has, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
 import zio.stream.{ Stream, ZStream }
 import izumi.reflect.Tag
 
@@ -269,7 +269,15 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
 object ZioJdbcContext {
   import zio.blocking._
 
-  case class Prefix(name: String)
+  case class Prefix(name: String) { self =>
+
+    def provideFor[T](qzio: RIO[BlockingPrefix, T]) =
+      for {
+        blocking <- ZIO.service[Blocking.Service]
+        result <- qzio.provide(Has.allOf(self, blocking))
+      } yield result
+  }
+
 
   val defaultRunner = io.getquill.context.zio.Runner.default
 
@@ -279,10 +287,19 @@ object ZioJdbcContext {
   type BlockingConfig = Has[Config] with Blocking
   type BlockingPrefix = Has[Prefix] with Blocking
 
-  private[getquill] def mapGeneric[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] =
-    ZLayer.fromServicesManyM[From, Blocking.Service, Has[From] with Blocking, Throwable, Has[To] with Blocking](
-      (from: From, b: Blocking.Service) => IO(Has(mapping(from)) ++ Has(b))
-    )
+  //  private[getquill] def mapGeneric[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] =
+  //    ZLayer.fromServicesManyM[From, Blocking.Service, Has[From] with Blocking, Throwable, Has[To] with Blocking](
+  //      (from: From, b: Blocking.Service) => IO(Has(mapping(from)) ++ Has(b))
+  //    )
+
+  private[getquill] def mapGeneric[From: Tag, To: Tag](
+    mapping: From => To
+  ): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] =
+    (for {
+      from <- ZIO.service[From]
+      blocking <- ZIO.service[Blocking.Service]
+      result <- blocking.effectBlocking(mapping(from))
+    } yield Has.allOf(result, blocking)).toLayerMany
 
   private[getquill] val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] =
     mapGeneric[Prefix, Config]((from: Prefix) => LoadConfig(from.name))
