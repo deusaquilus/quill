@@ -271,13 +271,13 @@ object ZioJdbcContext {
 
   case class Prefix(name: String) { self =>
 
-    def provideFor[T](qzio: RIO[BlockingPrefix, T]) =
+    def provideFor[T](qzio: RIO[BlockingPrefix, T]): ZIO[Blocking, Throwable, T] =
       for {
         blocking <- ZIO.service[Blocking.Service]
-        result <- qzio.provide(Has.allOf(self, blocking))
+        blockingPrefix = Has.allOf(blocking, self) // putting this right into qzio.provide would cause a typing error
+        result <- qzio.provide(blockingPrefix)
       } yield result
   }
-
 
   val defaultRunner = io.getquill.context.zio.Runner.default
 
