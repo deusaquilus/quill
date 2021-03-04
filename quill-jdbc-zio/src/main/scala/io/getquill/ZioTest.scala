@@ -3,9 +3,10 @@ package io.getquill
 //import java.sql.SQLException
 
 import java.sql.{Connection, SQLException}
-
 import com.typesafe.config.Config
+import io.getquill.context.zio.ZioJdbcContext.Prefix
 import io.getquill.util.LoadConfig
+
 import javax.sql.DataSource
 import zio._
 import zio.blocking.{Blocking, effectBlocking}
@@ -16,30 +17,20 @@ case class Person(name: String, age: Int)
 
 object ZioTest {
 
-//  type SqlDataSource = Has[SqlDataSource.Service]
-//  object SqlDataSource {
-//    trait Service {
-//      def dataSource: Task[DataSource]
-//    }
-//    val simple: Layer[Nothing, DataSource] = ZLayer.fromFunction { (ds: DataSource) =>
-//      new Service {
-//        override def dataSource: Task[DataSource] = Task(ds)
-//      }
-//    }
-//
-//    //def postgres = ZIO.accessM { (p: Prefix) => p.get.prefix }
-//  }
-
   def main(args: Array[String]): Unit = {
+    import io.getquill.context.zio.ZioJdbcContext.Implicits._
+
     val ctx = new PostgresZioJdbcContext(Literal)
     import ctx._
-    val runner = io.getquill.context.zio.Runner.default
-    import runner._
-    val r = ctx.run(query[Person])
-    val conf = JdbcContextConfig(LoadConfig("postgres"))
-    val print = r.map(r => println(r))
-    //val runtime = Runtime.apply(conf.dataSource.getConnection, Platform.default)
-    //runtime.unsafeRun(print)
+    val exec: RIO[Has[Connection] with Blocking, List[Person]] = ctx.run(query[Person])
+
+    val provided =
+      Prefix("testSqlServerDB").provideFor(exec.configureFromPrefix())
+
+    println(Runtime.default.unsafeRun(provided))
+
+
+    //r.configureFromPrefix().provide(effectBlocking(Prefix("testSqlServerDB")))
 
 
 
