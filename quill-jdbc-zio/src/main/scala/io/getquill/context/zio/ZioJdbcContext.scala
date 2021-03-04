@@ -1,16 +1,20 @@
 package io.getquill.context.zio
 
-import java.sql.{ Array => _, _ }
+import com.typesafe.config.Config
 
-import io.getquill.{ NamingStrategy, ReturnAction }
+import java.sql.{ Array => _, _ }
+import io.getquill.{ JdbcContextConfig, NamingStrategy, ReturnAction }
 import io.getquill.context.StreamingContext
 import io.getquill.context.jdbc.JdbcContextSimplified
 import io.getquill.context.sql.idiom.SqlIdiom
-import io.getquill.util.ContextLogger
+import io.getquill.util.{ ContextLogger, LoadConfig }
+
 import javax.sql.DataSource
 import zio.Exit.{ Failure, Success }
-import zio.{ Chunk, ChunkBuilder, RIO, Task, UIO, ZIO, ZManaged }
+import zio.{ Chunk, ChunkBuilder, Has, IO, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
 import zio.stream.{ Stream, ZStream }
+import ZioContext._
+import izumi.reflect.Tag
 
 import scala.util.Try
 
@@ -25,7 +29,8 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
 
   override private[getquill] val logger = ContextLogger(classOf[ZioJdbcContext[_, _]])
 
-  override def prepareSingle(sql: String, prepare: Prepare): Connection => RIO[Connection, PreparedStatement] = super.prepareSingle(sql, prepare)
+  // TODO Need to refactor out. Difficult because JdbcContextSimplified class defines this as Connection => ResultRow[PreparedStatement]
+  override def prepareSingle(sql: String, prepare: Prepare): Connection => RIO[BlockingConnection, PreparedStatement] = super.prepareSingle(sql, prepare)
 
   override type PrepareRow = PreparedStatement
   override type ResultRow = ResultSet
@@ -33,28 +38,28 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
   override type RunActionReturningResult[T] = T
   override type RunBatchActionResult = List[Long]
   override type RunBatchActionReturningResult[T] = List[T]
-  override type PrepareQueryResult = RIO[Connection, PrepareRow]
-  override type PrepareActionResult = RIO[Connection, PrepareRow]
-  override type PrepareBatchActionResult = RIO[Connection, List[PrepareRow]]
+  override type PrepareQueryResult = RIO[BlockingConnection, PrepareRow]
+  override type PrepareActionResult = RIO[BlockingConnection, PrepareRow]
+  override type PrepareBatchActionResult = RIO[BlockingConnection, List[PrepareRow]]
 
   // Need explicit return-type annotations due to scala/bug#8356. Otherwise macro system will not understand Result[Long]=Task[Long] etc...
-  override def executeAction[T](sql: String, prepare: Prepare = identityPrepare): RIO[Connection, Long] =
+  override def executeAction[T](sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, Long] =
     super.executeAction(sql, prepare)
-  override def executeQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[Connection, List[T]] =
+  override def executeQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[BlockingConnection, List[T]] =
     super.executeQuery(sql, prepare, extractor)
-  override def executeQuerySingle[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[Connection, T] =
+  override def executeQuerySingle[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[BlockingConnection, T] =
     super.executeQuerySingle(sql, prepare, extractor)
-  override def executeActionReturning[O](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[O], returningBehavior: ReturnAction): RIO[Connection, O] =
+  override def executeActionReturning[O](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[O], returningBehavior: ReturnAction): RIO[BlockingConnection, O] =
     super.executeActionReturning(sql, prepare, extractor, returningBehavior)
-  override def executeBatchAction(groups: List[BatchGroup]): RIO[Connection, List[Long]] =
+  override def executeBatchAction(groups: List[BatchGroup]): RIO[BlockingConnection, List[Long]] =
     super.executeBatchAction(groups)
-  override def executeBatchActionReturning[T](groups: List[BatchGroupReturning], extractor: Extractor[T]): RIO[Connection, List[T]] =
+  override def executeBatchActionReturning[T](groups: List[BatchGroupReturning], extractor: Extractor[T]): RIO[BlockingConnection, List[T]] =
     super.executeBatchActionReturning(groups, extractor)
-  override def prepareQuery[T](sql: String, prepare: Prepare, extractor: Extractor[T] = identityExtractor): RIO[Connection, PreparedStatement] =
+  override def prepareQuery[T](sql: String, prepare: Prepare, extractor: Extractor[T] = identityExtractor): RIO[BlockingConnection, PreparedStatement] =
     super.prepareQuery(sql, prepare, extractor)
-  override def prepareAction(sql: String, prepare: Prepare): RIO[Connection, PreparedStatement] =
+  override def prepareAction(sql: String, prepare: Prepare): RIO[BlockingConnection, PreparedStatement] =
     super.prepareAction(sql, prepare)
-  override def prepareBatchAction(groups: List[BatchGroup]): RIO[Connection, List[PreparedStatement]] =
+  override def prepareBatchAction(groups: List[BatchGroup]): RIO[BlockingConnection, List[PreparedStatement]] =
     super.prepareBatchAction(groups)
 
   override protected val effect: Runner = Runner.default
@@ -64,23 +69,23 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
   override def close(): Unit = ()
 
   protected def withConnection[T](f: Connection => Result[T]): Result[T] = throw new IllegalArgumentException("Not Used")
-  override protected def withConnectionWrapped[T](f: Connection => T): RIO[Connection, T] =
-    RIO.fromFunction(f) // blocking(RIO.fromFunction(f)) ? (import zio.blocking._)
+  override protected def withConnectionWrapped[T](f: Connection => T): RIO[BlockingConnection, T] =
+    RIO.fromFunction((conn: BlockingConnection) => f(conn.get))
 
   trait SameThreadExecutionContext extends scala.concurrent.ExecutionContext {
     def submit(runnable: Runnable): Unit =
       runnable.run()
   }
 
-  def transaction[A](f: RIO[Connection, A]): RIO[Connection, A] = {
+  def transaction[A](f: RIO[BlockingConnection, A]): RIO[BlockingConnection, A] = {
     def die = Task.die(new IllegalStateException("The task was cancelled in the middle of a transaction."))
-    ZIO.environment[Connection].flatMap(conn =>
+    ZIO.environment[BlockingConnection].flatMap(conn =>
       f.onInterrupt(die).onExit {
         case Success(_) =>
-          UIO(conn.commit())
+          UIO(conn.get.commit())
         case Failure(cause) =>
           // TODO Are we really catching the result of the conn.rollback() Task's exception?
-          catchAll(Task(conn.rollback()) *> Task.halt(cause))
+          catchAll(Task(conn.get.rollback()) *> Task.halt(cause))
       })
   }
 
@@ -159,7 +164,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
     stmt
   }
 
-  def streamQuery[T](fetchSize: Option[Int], sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): ZStream[Connection, Throwable, T] = {
+  def streamQuery[T](fetchSize: Option[Int], sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): ZStream[BlockingConnection, Throwable, T] = {
     def prepareStatement(conn: Connection) = {
       val stmt = prepareStatementForStreaming(sql, conn, fetchSize)
       val (params, ps) = prepare(stmt)
@@ -178,7 +183,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
         }
       }
 
-    val ret: ZStream[Connection, Throwable, T] =
+    val outStream: ZStream[Connection, Throwable, T] =
       managedEnv.flatMap {
         case (conn, ps, rs) =>
           val iter = new ResultSetIterator(rs, extractor)
@@ -192,7 +197,9 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
           }
       }
 
-    ret
+    // TODO This is a trick to convert Connection to BlockingConnection. Is there a better way to do that e.g. something like contraMapEnv
+    val wrapper = (bc: BlockingConnection) => outStream.provide(bc.get)
+    ZStream.access[BlockingConnection](wrapper).flatten
   }
 
   def guardedChunkFill[A](n: Int)(hasNext: => Boolean, elem: => A): Chunk[A] =
@@ -242,18 +249,103 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
     }
   }
 
-  override private[getquill] def prepareParams(statement: String, prepare: Prepare): RIO[Connection, Seq[String]] = {
+  override private[getquill] def prepareParams(statement: String, prepare: Prepare): RIO[BlockingConnection, Seq[String]] = {
     withConnectionWrapped { conn =>
       prepare(conn.prepareStatement(statement))._1.reverse.map(prepareParam)
     }
   }
 
-  def constructPrepareQuery(f: Connection => Result[PreparedStatement]): RIO[Connection, PreparedStatement] =
-    ZIO.environment[Connection].flatMap(c => f(c))
+  def constructPrepareQuery(f: Connection => Result[PreparedStatement]): RIO[BlockingConnection, PreparedStatement] =
+    ZIO.environment[BlockingConnection].flatMap(c => f(c.get))
 
-  def constructPrepareAction(f: Connection => Result[PreparedStatement]): RIO[Connection, PreparedStatement] =
-    ZIO.environment[Connection].flatMap(c => f(c))
+  def constructPrepareAction(f: Connection => Result[PreparedStatement]): RIO[BlockingConnection, PreparedStatement] =
+    ZIO.environment[BlockingConnection].flatMap(c => f(c.get))
 
-  def constructPrepareBatchAction(f: Connection => Result[List[PreparedStatement]]): RIO[Connection, List[PreparedStatement]] =
-    ZIO.environment[Connection].flatMap(c => f(c))
+  def constructPrepareBatchAction(f: Connection => Result[List[PreparedStatement]]): RIO[BlockingConnection, List[PreparedStatement]] =
+    ZIO.environment[BlockingConnection].flatMap(c => f(c.get))
+}
+
+object ZioJdbcContext {
+  import zio.blocking._
+
+  val defaultRunner = io.getquill.context.zio.Runner.default
+
+  //ZLayer.fromEffectMany(effectBlocking(LoadConfig(str)))
+  type BlockingDataSource = Has[DataSource] with Blocking
+  type BlockingJdbcContextConfig = Has[JdbcContextConfig] with Blocking
+  type BlockingConfig = Has[Config] with Blocking
+  type BlockingPrefix = Has[Prefix] with Blocking
+
+  def createFromDataSource[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
+    ZIO.environment[BlockingDataSource].flatMap { bd =>
+      val blockingSvc: Blocking.Service = bd.get[Blocking.Service]
+      def connectionSvc: Connection = bd.get[DataSource].getConnection
+
+      val connectionWithBlocking: ZLayer[Any, Throwable, Has[Connection] with Has[Blocking.Service]] =
+        blockingSvc.effectBlocking(connectionSvc)
+          .toLayer
+          .map(hc => hc ++ Has(blockingSvc))
+
+      val bc: ZLayer[Any, Throwable, BlockingConnection] = connectionWithBlocking
+      qzio.provideLayer(bc)
+    }
+
+  //  private[getquill] val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] = {
+  //    ZLayer.fromFunctionManyM { (bp: BlockingPrefix) =>
+  //      val prefixSvc = bp.get[Prefix]
+  //      val blockingSvc = bp.get[Blocking.Service]
+  //      val t = blockingSvc.effectBlocking(Has(LoadConfig(prefixSvc.name))).map(conf => conf ++ Has(blockingSvc))
+  //      val io: IO[Throwable, BlockingConfig] = t
+  //      io
+  //    }
+  //  }
+
+  private[getquill] def mapGeneric2[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] = {
+    ZLayer.fromFunctionManyM { (provision: Has[From] with Blocking) =>
+      val from = provision.get[From]
+      val blockingSvc = provision.get[Blocking.Service]
+      val t = blockingSvc.effectBlocking(Has(mapping(from))).map(conf => conf ++ Has(blockingSvc))
+      val io: IO[Throwable, Has[To] with Blocking] = t
+      io
+    }
+  }
+
+  private[getquill] def mapGeneric[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] = {
+    ZLayer.fromServicesManyM[From, Blocking.Service, Has[From] with Blocking, Throwable, Has[To] with Blocking](
+      (from: From, b: Blocking.Service) => IO(Has(mapping(from)) ++ Has(b))
+    )
+  }
+
+  val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] =
+    mapGeneric[Prefix, Config]((from: Prefix) => LoadConfig(from.name))
+
+  //val r: ZLayer[Has[Prefix] with Has[Blocking], Nothing, Has[Config]] =
+  val r = ZLayer.fromServicesManyM((p: Prefix, b: Blocking.Service) => IO(Has(LoadConfig(p.name)) ++ Has(b)))
+
+  val configToJdbcConfig: ZLayer[BlockingConfig, Throwable, BlockingJdbcContextConfig] =
+    mapGeneric[Config, JdbcContextConfig]((from: Config) => JdbcContextConfig(from))
+
+  val jdbcConfigToDataSource: ZLayer[BlockingJdbcContextConfig, Throwable, BlockingDataSource] =
+    mapGeneric[JdbcContextConfig, DataSource]((from: JdbcContextConfig) => from.dataSource)
+
+  val dataSourceToConnection: ZLayer[BlockingDataSource, Throwable, BlockingConnection] =
+    mapGeneric[DataSource, Connection]((from: DataSource) => from.getConnection)
+
+  //  private[getquill] val configToDsConf = ZLayer.fromFunctionManyM { conf: Config => IO.effect(JdbcContextConfig(conf)) }
+  //  private[getquill] val dsConfToDs = ZLayer.fromFunctionManyM { jconf: JdbcContextConfig => IO.effect(jconf.dataSource) }
+  //  private[getquill] val dsToConn = ZLayer.fromAcquireReleaseMany(
+  //    ZIO.environment[Has[DataSource]]
+  //      .mapEffect(e => effectBlocking(e.get.getConnection)).flatten
+  //      .refineToOrDie[SQLException]
+  //  )(c => defaultRunner.catchAll(RIO(c.close)))
+  //
+  def fromPrefix[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingPrefix, Throwable, T] =
+    qzio.provideLayer(prefixToConfig >>> configToJdbcConfig >>> jdbcConfigToDataSource >>> dataSourceToConnection)
+  def fromConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingConfig, Throwable, T] =
+    qzio.provideLayer(configToJdbcConfig >>> jdbcConfigToDataSource >>> dataSourceToConnection)
+  def fromDsConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingJdbcContextConfig, Throwable, T] =
+    qzio.provideLayer(jdbcConfigToDataSource >>> dataSourceToConnection)
+  def fromDs[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
+    qzio.provideLayer(dataSourceToConnection)
+
 }

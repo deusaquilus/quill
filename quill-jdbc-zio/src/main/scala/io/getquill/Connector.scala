@@ -1,6 +1,5 @@
 package io.getquill
 
-import com.zaxxer.hikari.HikariDataSource
 import zio._
 import io.getquill.context.zio.Runner
 
