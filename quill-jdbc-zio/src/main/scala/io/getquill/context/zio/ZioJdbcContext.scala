@@ -13,7 +13,6 @@ import javax.sql.DataSource
 import zio.Exit.{ Failure, Success }
 import zio.{ Chunk, ChunkBuilder, Has, IO, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
 import zio.stream.{ Stream, ZStream }
-import ZioContext._
 import izumi.reflect.Tag
 
 import scala.util.Try
@@ -26,6 +25,8 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
   with JdbcContextSimplified[Dialect, Naming]
   with StreamingContext[Dialect, Naming]
   with ZioTranslateContext {
+
+  import ZioJdbcContext._
 
   override private[getquill] val logger = ContextLogger(classOf[ZioJdbcContext[_, _]])
 
@@ -268,84 +269,45 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
 object ZioJdbcContext {
   import zio.blocking._
 
+  case class Prefix(name: String)
+
   val defaultRunner = io.getquill.context.zio.Runner.default
 
-  //ZLayer.fromEffectMany(effectBlocking(LoadConfig(str)))
+  type BlockingConnection = Has[Connection] with Blocking
   type BlockingDataSource = Has[DataSource] with Blocking
   type BlockingJdbcContextConfig = Has[JdbcContextConfig] with Blocking
   type BlockingConfig = Has[Config] with Blocking
   type BlockingPrefix = Has[Prefix] with Blocking
 
-  def createFromDataSource[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
-    ZIO.environment[BlockingDataSource].flatMap { bd =>
-      val blockingSvc: Blocking.Service = bd.get[Blocking.Service]
-      def connectionSvc: Connection = bd.get[DataSource].getConnection
-
-      val connectionWithBlocking: ZLayer[Any, Throwable, Has[Connection] with Has[Blocking.Service]] =
-        blockingSvc.effectBlocking(connectionSvc)
-          .toLayer
-          .map(hc => hc ++ Has(blockingSvc))
-
-      val bc: ZLayer[Any, Throwable, BlockingConnection] = connectionWithBlocking
-      qzio.provideLayer(bc)
-    }
-
-  //  private[getquill] val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] = {
-  //    ZLayer.fromFunctionManyM { (bp: BlockingPrefix) =>
-  //      val prefixSvc = bp.get[Prefix]
-  //      val blockingSvc = bp.get[Blocking.Service]
-  //      val t = blockingSvc.effectBlocking(Has(LoadConfig(prefixSvc.name))).map(conf => conf ++ Has(blockingSvc))
-  //      val io: IO[Throwable, BlockingConfig] = t
-  //      io
-  //    }
-  //  }
-
-  private[getquill] def mapGeneric2[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] = {
-    ZLayer.fromFunctionManyM { (provision: Has[From] with Blocking) =>
-      val from = provision.get[From]
-      val blockingSvc = provision.get[Blocking.Service]
-      val t = blockingSvc.effectBlocking(Has(mapping(from))).map(conf => conf ++ Has(blockingSvc))
-      val io: IO[Throwable, Has[To] with Blocking] = t
-      io
-    }
-  }
-
-  private[getquill] def mapGeneric[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] = {
+  private[getquill] def mapGeneric[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] =
     ZLayer.fromServicesManyM[From, Blocking.Service, Has[From] with Blocking, Throwable, Has[To] with Blocking](
       (from: From, b: Blocking.Service) => IO(Has(mapping(from)) ++ Has(b))
     )
-  }
 
-  val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] =
+  private[getquill] val prefixToConfig: ZLayer[BlockingPrefix, Throwable, BlockingConfig] =
     mapGeneric[Prefix, Config]((from: Prefix) => LoadConfig(from.name))
-
-  //val r: ZLayer[Has[Prefix] with Has[Blocking], Nothing, Has[Config]] =
-  val r = ZLayer.fromServicesManyM((p: Prefix, b: Blocking.Service) => IO(Has(LoadConfig(p.name)) ++ Has(b)))
-
-  val configToJdbcConfig: ZLayer[BlockingConfig, Throwable, BlockingJdbcContextConfig] =
+  private[getquill] val configToJdbcConfig: ZLayer[BlockingConfig, Throwable, BlockingJdbcContextConfig] =
     mapGeneric[Config, JdbcContextConfig]((from: Config) => JdbcContextConfig(from))
-
-  val jdbcConfigToDataSource: ZLayer[BlockingJdbcContextConfig, Throwable, BlockingDataSource] =
+  private[getquill] val jdbcConfigToDataSource: ZLayer[BlockingJdbcContextConfig, Throwable, BlockingDataSource] =
     mapGeneric[JdbcContextConfig, DataSource]((from: JdbcContextConfig) => from.dataSource)
-
-  val dataSourceToConnection: ZLayer[BlockingDataSource, Throwable, BlockingConnection] =
+  private[getquill] val dataSourceToConnection: ZLayer[BlockingDataSource, Throwable, BlockingConnection] =
     mapGeneric[DataSource, Connection]((from: DataSource) => from.getConnection)
 
-  //  private[getquill] val configToDsConf = ZLayer.fromFunctionManyM { conf: Config => IO.effect(JdbcContextConfig(conf)) }
-  //  private[getquill] val dsConfToDs = ZLayer.fromFunctionManyM { jconf: JdbcContextConfig => IO.effect(jconf.dataSource) }
-  //  private[getquill] val dsToConn = ZLayer.fromAcquireReleaseMany(
-  //    ZIO.environment[Has[DataSource]]
-  //      .mapEffect(e => effectBlocking(e.get.getConnection)).flatten
-  //      .refineToOrDie[SQLException]
-  //  )(c => defaultRunner.catchAll(RIO(c.close)))
-  //
-  def fromPrefix[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingPrefix, Throwable, T] =
+  def configureFromPrefix[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingPrefix, Throwable, T] =
     qzio.provideLayer(prefixToConfig >>> configToJdbcConfig >>> jdbcConfigToDataSource >>> dataSourceToConnection)
-  def fromConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingConfig, Throwable, T] =
+  def configureFromConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingConfig, Throwable, T] =
     qzio.provideLayer(configToJdbcConfig >>> jdbcConfigToDataSource >>> dataSourceToConnection)
-  def fromDsConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingJdbcContextConfig, Throwable, T] =
+  def configureFromDsConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingJdbcContextConfig, Throwable, T] =
     qzio.provideLayer(jdbcConfigToDataSource >>> dataSourceToConnection)
-  def fromDs[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
+  def configureFromDs[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
     qzio.provideLayer(dataSourceToConnection)
 
+  object Implicits {
+    implicit class QuillZioExt[T](qzio: ZIO[BlockingConnection, Throwable, T]) {
+      def configureFromPrefix(): ZIO[BlockingPrefix, Throwable, T] = ZioJdbcContext.configureFromPrefix(qzio)
+      def configureFromConf(): ZIO[BlockingConfig, Throwable, T] = ZioJdbcContext.configureFromConf(qzio)
+      def configureFromDsConf(): ZIO[BlockingJdbcContextConfig, Throwable, T] = ZioJdbcContext.configureFromDsConf(qzio)
+      def configureFromDs(): ZIO[BlockingDataSource, Throwable, T] = ZioJdbcContext.configureFromDs(qzio)
+    }
+  }
 }
