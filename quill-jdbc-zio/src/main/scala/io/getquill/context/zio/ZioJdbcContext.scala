@@ -78,16 +78,38 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       runnable.run()
   }
 
+  def withoutAutoCommit[A](f: ZIO[BlockingConnection, Throwable, A]): ZIO[BlockingConnection, Throwable, A] = {
+    for {
+      blockingConn <- ZIO.environment[BlockingConnection]
+      conn = blockingConn.get[Connection]
+      autoCommitPrev = conn.getAutoCommit
+      r <- Task(conn).bracket(conn => wrapClose(conn.setAutoCommit(autoCommitPrev)))(
+        conn => Task { conn.setAutoCommit(false) }.flatMap(_ => f)
+      )
+    } yield r
+  }
+
+  //  def withCommitRollback[A](f: ZIO[BlockingConnection, Throwable, A]): ZIO[BlockingConnection, Throwable, A] = {
+  //    for {
+  //      conn <- ZIO.service[Connection]
+  //      _ <- Task(conn).bracket(conn => {
+  //        catchAll(Task(conn.rollback()))
+  //      })(conn =>
+  //        UIO(conn.commit()))
+  //      r <- f
+  //    } yield r
+  //  }
+
   def transaction[A](f: RIO[BlockingConnection, A]): RIO[BlockingConnection, A] = {
     def die = Task.die(new IllegalStateException("The task was cancelled in the middle of a transaction."))
-    ZIO.environment[BlockingConnection].flatMap(conn =>
+    withoutAutoCommit(ZIO.environment[BlockingConnection].flatMap(conn =>
       f.onInterrupt(die).onExit {
         case Success(_) =>
           UIO(conn.get.commit())
         case Failure(cause) =>
           // TODO Are we really catching the result of the conn.rollback() Task's exception?
           catchAll(Task(conn.get.rollback()) *> Task.halt(cause))
-      })
+      }))
   }
 
   def probingDataSource: Option[DataSource] = None
@@ -269,15 +291,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
 object ZioJdbcContext {
   import zio.blocking._
 
-  case class Prefix(name: String) { self =>
-
-    def provideFor[T](qzio: RIO[BlockingPrefix, T]): ZIO[Blocking, Throwable, T] =
-      for {
-        blocking <- ZIO.service[Blocking.Service]
-        blockingPrefix = Has.allOf(blocking, self) // putting this right into qzio.provide would cause a typing error
-        result <- qzio.provide(blockingPrefix)
-      } yield result
-  }
+  case class Prefix(name: String)
 
   val defaultRunner = io.getquill.context.zio.Runner.default
 
@@ -286,11 +300,6 @@ object ZioJdbcContext {
   type BlockingJdbcContextConfig = Has[JdbcContextConfig] with Blocking
   type BlockingConfig = Has[Config] with Blocking
   type BlockingPrefix = Has[Prefix] with Blocking
-
-  //  private[getquill] def mapGeneric[From: Tag, To: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] =
-  //    ZLayer.fromServicesManyM[From, Blocking.Service, Has[From] with Blocking, Throwable, Has[To] with Blocking](
-  //      (from: From, b: Blocking.Service) => IO(Has(mapping(from)) ++ Has(b))
-  //    )
 
   private[getquill] def mapGeneric[From: Tag, To: Tag](
     mapping: From => To
@@ -310,6 +319,18 @@ object ZioJdbcContext {
   private[getquill] val dataSourceToConnection: ZLayer[BlockingDataSource, Throwable, BlockingConnection] =
     mapGeneric[DataSource, Connection]((from: DataSource) => from.getConnection)
 
+  // Trying to provide self-closing connection layer but so far not working
+  // trying to get connection to automatically close afterward but not working
+  //  private[getquill] val dataSourceToConnection: ZLayer[BlockingDataSource, Throwable, BlockingConnection] =
+  //    (for {
+  //      ds <- ZIO.environment[BlockingDataSource]
+  //      blocking <- ZIO.service[Blocking.Service]
+  //      result <- {
+  //        val man = ZManaged.make(blocking.effectBlocking(ds.get[DataSource].getConnection))(conn => Runner.default.catchAll(blocking.effectBlocking(conn.close())))
+  //        man.use(conn => Task(conn))
+  //      }
+  //    } yield Has.allOf(result, blocking)).toLayerMany
+
   def configureFromPrefix[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingPrefix, Throwable, T] =
     qzio.provideLayer(prefixToConfig >>> configToJdbcConfig >>> jdbcConfigToDataSource >>> dataSourceToConnection)
   def configureFromConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingConfig, Throwable, T] =
@@ -319,12 +340,26 @@ object ZioJdbcContext {
   def configureFromDs[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
     qzio.provideLayer(dataSourceToConnection)
 
-  object Implicits {
-    implicit class QuillZioExt[T](qzio: ZIO[BlockingConnection, Throwable, T]) {
-      def configureFromPrefix(): ZIO[BlockingPrefix, Throwable, T] = ZioJdbcContext.configureFromPrefix(qzio)
-      def configureFromConf(): ZIO[BlockingConfig, Throwable, T] = ZioJdbcContext.configureFromConf(qzio)
-      def configureFromDsConf(): ZIO[BlockingJdbcContextConfig, Throwable, T] = ZioJdbcContext.configureFromDsConf(qzio)
-      def configureFromDs(): ZIO[BlockingDataSource, Throwable, T] = ZioJdbcContext.configureFromDs(qzio)
-    }
+  implicit class QuillZioExt[T](qzio: ZIO[BlockingConnection, Throwable, T]) {
+    def dependOnPrefix(): ZIO[BlockingPrefix, Throwable, T] = ZioJdbcContext.configureFromPrefix(qzio)
+    def dependOnConf(): ZIO[BlockingConfig, Throwable, T] = ZioJdbcContext.configureFromConf(qzio)
+    def dependOnDsConf(): ZIO[BlockingJdbcContextConfig, Throwable, T] = ZioJdbcContext.configureFromDsConf(qzio)
+    def dependOnDs(): ZIO[BlockingDataSource, Throwable, T] = ZioJdbcContext.configureFromDs(qzio)
+
+    def providePrefix(prefix: Prefix): ZIO[Blocking, Throwable, T] =
+      provideOne(prefix)(qzio.dependOnPrefix())
+    def provideConf(config: Config): ZIO[Blocking, Throwable, T] =
+      provideOne(config)(qzio.dependOnConf())
+    def provideDsConf(dsConf: JdbcContextConfig): ZIO[Blocking, Throwable, T] =
+      provideOne(dsConf)(qzio.dependOnDsConf())
+    def provideDs(ds: DataSource): ZIO[Blocking, Throwable, T] =
+      provideOne(ds)(qzio.dependOnDs())
   }
+
+  def provideOne[P: Tag, T, E: Tag, Rest <: Has[_]: Tag](provision: P)(qzio: ZIO[Has[P] with Rest, E, T]): ZIO[Rest, E, T] =
+    for {
+      rest <- ZIO.environment[Rest]
+      env = Has(provision) ++ rest
+      result <- qzio.provide(env)
+    } yield result
 }

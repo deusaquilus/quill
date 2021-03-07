@@ -1,22 +1,22 @@
 //package io.getquill.postgres
 //
 //import java.util.UUID
-//
-//import io.getquill.context.monix.Runner
-//import io.getquill.{ JdbcContextConfig, Literal, PostgresMonixJdbcContext }
+//import io.getquill.{ JdbcContextConfig, Literal, PostgresZioJdbcContext, TestEntities, ZioSpec }
 //import io.getquill.context.sql.ProductSpec
+//import io.getquill.context.zio.ZioJdbcContext
+//import io.getquill.context.zio.ZioJdbcContext.Prefix
 //import io.getquill.util.LoadConfig
-//import monix.execution.Scheduler
+//import io.getquill.context.zio.ZioJdbcContext._
+//import zio.Runtime
 //
 //import scala.util.Random
 //
-//class ConnectionLeakTest extends ProductSpec {
+// TODO Need self-closing connection layer for this to work
+//class ConnectionLeakTest extends ProductSpec with ZioSpec {
 //
-//  implicit val scheduler = Scheduler.global
-//
+//  override def prefix: ZioJdbcContext.Prefix = Prefix("testPostgresLeakDB")
 //  val dataSource = JdbcContextConfig(LoadConfig("testPostgresLeakDB")).dataSource
-//
-//  val context = new PostgresMonixJdbcContext(Literal, dataSource, Runner.default)
+//  val context = new PostgresZioJdbcContext(Literal)
 //  import context._
 //
 //  override def beforeAll = {
@@ -26,7 +26,7 @@
 //
 //  "insert and select without leaking" in {
 //    val result =
-//      context.transaction {
+//      Runtime.default.unsafeRun(context.transaction {
 //        for {
 //          _ <- context.run {
 //            quote {
@@ -41,7 +41,7 @@
 //        } yield (result)
 //      }
 //        .map(_.headOption.map(_.id))
-//        .runSyncUnsafe()
+//        .provideDs(dataSource))
 //
 //    Thread.sleep(2000)
 //

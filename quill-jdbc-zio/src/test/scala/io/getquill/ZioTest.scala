@@ -13,23 +13,25 @@ import zio.blocking.{Blocking, effectBlocking}
 import zio.internal.Platform
 //import zio.Exit._
 
-case class Person(name: String, age: Int)
+
 
 //object MyZioContext extends PostgresZioJdbcContext(Literal)
 
 object ZioTest {
 
+  case class Person(name: String, age: Int)
+
   def main(args: Array[String]): Unit = {
-    import io.getquill.context.zio.ZioJdbcContext.Implicits._
+    import io.getquill.context.zio.ZioJdbcContext._
 
     val ctx = new PostgresZioJdbcContext(Literal)
     import ctx._
     val exec: RIO[Has[Connection] with Blocking, List[Person]] = ctx.run(query[Person])
 
-    val provided =
-      Prefix("testSqlServerDB").provideFor(exec.configureFromPrefix())
+    //val provided =
+    //  Prefix("testSqlServerDB").provideFor(exec.configureFromPrefix())
 
-    println(Runtime.default.unsafeRun(provided))
+    //println(Runtime.default.unsafeRun(provided))
 
 
     //r.configureFromPrefix().provide(effectBlocking(Prefix("testSqlServerDB")))

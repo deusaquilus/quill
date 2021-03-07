@@ -34,5 +34,6 @@ trait Runner extends ContextEffect[Runner.RIOConn] {
    * method because the client may prefer to fail silently on a ResultSet close
    * as opposed to failing the surrounding task.
    */
-  def wrapClose(t: => Any): ZIO[java.sql.Connection, Nothing, Unit] = catchAll(Task(t)).unit
+  // TODO Something about a drain that needs to happen here?
+  def wrapClose(t: => Any): ZIO[Any, Nothing, Unit] = catchAll(Task(t)).unit
 }
