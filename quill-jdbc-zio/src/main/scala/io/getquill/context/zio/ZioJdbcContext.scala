@@ -338,7 +338,15 @@ object ZioJdbcContext {
   def configureFromDsConf[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingJdbcContextConfig, Throwable, T] =
     qzio.provideLayer(jdbcConfigToDataSource >>> dataSourceToConnection)
   def configureFromDs[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
-    qzio.provideLayer(dataSourceToConnection)
+    for {
+      blockDs <- ZIO.environment[BlockingDataSource]
+      ds = blockDs.get[DataSource]
+      blocking = blockDs.get[Blocking.Service]
+      r <- ZIO.bracket(Task(ds.getConnection))(conn => Runner.default.wrapClose(conn.close()))(
+        // again, for bracketing to work properly, you have to flatMap the task inside
+        conn => Task(conn).flatMap(_ => qzio.provide(Has(conn) ++ Has(blocking)))
+      )
+    } yield (r)
 
   implicit class QuillZioExt[T](qzio: ZIO[BlockingConnection, Throwable, T]) {
     def dependOnPrefix(): ZIO[BlockingPrefix, Throwable, T] = ZioJdbcContext.configureFromPrefix(qzio)
