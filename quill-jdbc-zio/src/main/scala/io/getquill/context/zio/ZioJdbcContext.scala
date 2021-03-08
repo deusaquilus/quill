@@ -3,7 +3,7 @@ package io.getquill.context.zio
 import com.typesafe.config.Config
 import io.getquill.context.jdbc.JdbcRunContext
 import io.getquill.context.sql.idiom.SqlIdiom
-import io.getquill.context.{ PrepareContext, StreamingContext }
+import io.getquill.context.StreamingContext
 import io.getquill.util.{ ContextLogger, LoadConfig }
 import io.getquill.{ JdbcContextConfig, NamingStrategy, ReturnAction }
 import izumi.reflect.Tag
@@ -15,44 +15,6 @@ import zio.{ Chunk, ChunkBuilder, Has, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
 import java.sql.{ Array => _, _ }
 import javax.sql.DataSource
 import scala.util.Try
-
-trait ZioPrepareContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends ZioContext[Dialect, Naming]
-  with PrepareContext {
-
-  import ZioJdbcContext._
-  private[getquill] val logger = ContextLogger(classOf[ZioPrepareContext[_, _]])
-
-  override type PrepareRow = PreparedStatement
-  override type ResultRow = ResultSet
-  override type PrepareQueryResult = RIO[BlockingConnection, PrepareRow]
-  override type PrepareActionResult = RIO[BlockingConnection, PrepareRow]
-  override type PrepareBatchActionResult = RIO[BlockingConnection, List[PrepareRow]]
-
-  def prepareQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): PrepareQueryResult =
-    prepareSingle(sql, prepare)
-
-  def prepareAction(sql: String, prepare: Prepare = identityPrepare): PrepareActionResult =
-    prepareSingle(sql, prepare)
-
-  def prepareSingle(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] =
-    ZIO.environment[BlockingConnection].map { bconn =>
-      val (params, ps) = prepare(bconn.get[Connection].prepareStatement(sql))
-      logger.logQuery(sql, params)
-      ps
-    }
-
-  def prepareBatchAction(groups: List[BatchGroup]): PrepareBatchActionResult =
-    ZIO.collectAll[Has[Connection] with Blocking, Throwable, PrepareRow, List] {
-      val batches = groups.flatMap {
-        case BatchGroup(sql, prepares) =>
-          prepares.map(sql -> _)
-      }
-      batches.map {
-        case (sql, prepare) =>
-          prepareSingle(sql, prepare)
-      }
-    }
-}
 
 /**
  * Quill context that wraps all JDBC calls in `monix.eval.Task`.
@@ -120,17 +82,6 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       )
     } yield r
   }
-
-  //  def withCommitRollback[A](f: ZIO[BlockingConnection, Throwable, A]): ZIO[BlockingConnection, Throwable, A] = {
-  //    for {
-  //      conn <- ZIO.service[Connection]
-  //      _ <- Task(conn).bracket(conn => {
-  //        catchAll(Task(conn.rollback()))
-  //      })(conn =>
-  //        UIO(conn.commit()))
-  //      r <- f
-  //    } yield r
-  //  }
 
   def transaction[A](f: RIO[BlockingConnection, A]): RIO[BlockingConnection, A] = {
     def die = Task.die(new IllegalStateException("The task was cancelled in the middle of a transaction."))
