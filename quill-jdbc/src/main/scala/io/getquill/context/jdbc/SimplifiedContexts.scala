@@ -5,6 +5,9 @@ import java.sql.Types
 import io.getquill._
 
 trait PostgresJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified[PostgresDialect, N]
+  with PostgresJdbcRunContext[N]
+
+trait PostgresJdbcRunContext[N <: NamingStrategy] extends JdbcRunContext[PostgresDialect, N]
   with BooleanObjectEncoding
   with UUIDObjectEncoding
   with ArrayDecoders
@@ -21,6 +24,9 @@ trait PostgresJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimp
 }
 
 trait H2JdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified[H2Dialect, N]
+  with H2JdbcRunContext[N]
+
+trait H2JdbcRunContext[N <: NamingStrategy] extends JdbcContextSimplified[H2Dialect, N]
   with BooleanObjectEncoding
   with UUIDObjectEncoding {
 
@@ -28,6 +34,9 @@ trait H2JdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified
 }
 
 trait MysqlJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified[MySQLDialect, N]
+  with MysqlJdbcRunContext[N]
+
+trait MysqlJdbcRunContext[N <: NamingStrategy] extends JdbcContextSimplified[MySQLDialect, N]
   with BooleanObjectEncoding
   with UUIDStringEncoding {
 
@@ -35,6 +44,9 @@ trait MysqlJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplif
 }
 
 trait SqliteJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified[SqliteDialect, N]
+  with SqliteJdbcRunContext[N]
+
+trait SqliteJdbcRunContext[N <: NamingStrategy] extends JdbcContextSimplified[SqliteDialect, N]
   with BooleanObjectEncoding
   with UUIDObjectEncoding {
 
@@ -42,6 +54,9 @@ trait SqliteJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimpli
 }
 
 trait SqlServerJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified[SQLServerDialect, N]
+  with SqlServerJdbcRunContext[N]
+
+trait SqlServerJdbcRunContext[N <: NamingStrategy] extends JdbcContextSimplified[SQLServerDialect, N]
   with BooleanObjectEncoding
   with UUIDStringEncoding {
 
@@ -56,6 +71,9 @@ trait SqlServerJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSim
 }
 
 trait OracleJdbcContextSimplified[N <: NamingStrategy] extends JdbcContextSimplified[OracleDialect, N]
+  with OracleJdbcRunContext[N]
+
+trait OracleJdbcRunContext[N <: NamingStrategy] extends JdbcContextSimplified[OracleDialect, N]
   with BooleanIntEncoding
   with UUIDStringEncoding {
 

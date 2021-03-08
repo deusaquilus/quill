@@ -4,8 +4,8 @@
 //
 //import io.getquill.context.jdbc.ResultSetExtractor
 //import io.getquill.context.sql.ProductSpec
-//import monix.eval.Task
 //import org.scalactic.Equality
+//import zio.Task
 //
 //trait PrepareMonixJdbcSpecBase extends ProductSpec {
 //

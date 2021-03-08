@@ -2,8 +2,6 @@
 //
 //import java.sql.ResultSet
 //
-//import io.getquill.PrepareMonixJdbcSpecBase
-//import monix.execution.Scheduler
 //import org.scalatest.BeforeAndAfter
 //
 //class PrepareJdbcSpec extends PrepareMonixJdbcSpecBase with BeforeAndAfter {

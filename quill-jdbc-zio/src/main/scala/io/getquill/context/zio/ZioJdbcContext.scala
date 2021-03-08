@@ -1,37 +1,72 @@
 package io.getquill.context.zio
 
 import com.typesafe.config.Config
+import io.getquill.context.jdbc.JdbcRunContext
+import io.getquill.context.sql.idiom.SqlIdiom
+import io.getquill.context.{ PrepareContext, StreamingContext }
+import io.getquill.util.{ ContextLogger, LoadConfig }
+import io.getquill.{ JdbcContextConfig, NamingStrategy, ReturnAction }
+import izumi.reflect.Tag
+import zio.Exit.{ Failure, Success }
+import zio.blocking.Blocking
+import zio.stream.{ Stream, ZStream }
+import zio.{ Chunk, ChunkBuilder, Has, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
 
 import java.sql.{ Array => _, _ }
-import io.getquill.{ JdbcContextConfig, NamingStrategy, ReturnAction }
-import io.getquill.context.StreamingContext
-import io.getquill.context.jdbc.JdbcContextSimplified
-import io.getquill.context.sql.idiom.SqlIdiom
-import io.getquill.util.{ ContextLogger, LoadConfig }
-
 import javax.sql.DataSource
-import zio.Exit.{ Failure, Success }
-import zio.{ Chunk, ChunkBuilder, Has, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
-import zio.stream.{ Stream, ZStream }
-import izumi.reflect.Tag
-
 import scala.util.Try
+
+trait ZioPrepareContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends ZioContext[Dialect, Naming]
+  with PrepareContext {
+
+  import ZioJdbcContext._
+  private[getquill] val logger = ContextLogger(classOf[ZioPrepareContext[_, _]])
+
+  override type PrepareRow = PreparedStatement
+  override type ResultRow = ResultSet
+  override type PrepareQueryResult = RIO[BlockingConnection, PrepareRow]
+  override type PrepareActionResult = RIO[BlockingConnection, PrepareRow]
+  override type PrepareBatchActionResult = RIO[BlockingConnection, List[PrepareRow]]
+
+  def prepareQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): PrepareQueryResult =
+    prepareSingle(sql, prepare)
+
+  def prepareAction(sql: String, prepare: Prepare = identityPrepare): PrepareActionResult =
+    prepareSingle(sql, prepare)
+
+  def prepareSingle(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] =
+    ZIO.environment[BlockingConnection].map { bconn =>
+      val (params, ps) = prepare(bconn.get[Connection].prepareStatement(sql))
+      logger.logQuery(sql, params)
+      ps
+    }
+
+  def prepareBatchAction(groups: List[BatchGroup]): PrepareBatchActionResult =
+    ZIO.collectAll[Has[Connection] with Blocking, Throwable, PrepareRow, List] {
+      val batches = groups.flatMap {
+        case BatchGroup(sql, prepares) =>
+          prepares.map(sql -> _)
+      }
+      batches.map {
+        case (sql, prepare) =>
+          prepareSingle(sql, prepare)
+      }
+    }
+}
 
 /**
  * Quill context that wraps all JDBC calls in `monix.eval.Task`.
  *
  */
 abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends ZioContext[Dialect, Naming]
-  with JdbcContextSimplified[Dialect, Naming]
+  with JdbcRunContext[Dialect, Naming]
   with StreamingContext[Dialect, Naming]
+  with ZioPrepareContext[Dialect, Naming]
   with ZioTranslateContext {
 
   import ZioJdbcContext._
 
   override private[getquill] val logger = ContextLogger(classOf[ZioJdbcContext[_, _]])
-
-  // TODO Need to refactor out. Difficult because JdbcContextSimplified class defines this as Connection => ResultRow[PreparedStatement]
-  override def prepareSingle(sql: String, prepare: Prepare): Connection => RIO[BlockingConnection, PreparedStatement] = super.prepareSingle(sql, prepare)
 
   override type PrepareRow = PreparedStatement
   override type ResultRow = ResultSet
@@ -39,9 +74,6 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
   override type RunActionReturningResult[T] = T
   override type RunBatchActionResult = List[Long]
   override type RunBatchActionReturningResult[T] = List[T]
-  override type PrepareQueryResult = RIO[BlockingConnection, PrepareRow]
-  override type PrepareActionResult = RIO[BlockingConnection, PrepareRow]
-  override type PrepareBatchActionResult = RIO[BlockingConnection, List[PrepareRow]]
 
   // Need explicit return-type annotations due to scala/bug#8356. Otherwise macro system will not understand Result[Long]=Task[Long] etc...
   override def executeAction[T](sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, Long] =
@@ -346,7 +378,7 @@ object ZioJdbcContext {
         // again, for bracketing to work properly, you have to flatMap the task inside
         conn => Task(conn).flatMap(_ => qzio.provide(Has(conn) ++ Has(blocking)))
       )
-    } yield (r)
+    } yield r
 
   implicit class QuillZioExt[T](qzio: ZIO[BlockingConnection, Throwable, T]) {
     def dependOnPrefix(): ZIO[BlockingPrefix, Throwable, T] = ZioJdbcContext.configureFromPrefix(qzio)

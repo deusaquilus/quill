@@ -6,7 +6,7 @@ import java.util.{ Calendar, TimeZone }
 import java.{ sql, util }
 
 trait Encoders {
-  this: JdbcContextSimplified[_, _] =>
+  this: JdbcRunContext[_, _] =>
 
   type Encoder[T] = JdbcEncoder[T]
 
