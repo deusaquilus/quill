@@ -4,7 +4,7 @@ import io.getquill.NamingStrategy
 import io.getquill.context.PrepareContext
 import io.getquill.context.sql.idiom.SqlIdiom
 import io.getquill.util.ContextLogger
-import zio.{ Has, RIO, ZIO }
+import zio.{ Has, RIO, Task, ZIO }
 import zio.blocking.Blocking
 import io.getquill.context.ZioJdbc._
 
@@ -27,11 +27,17 @@ trait ZioPrepareContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends Z
   def prepareAction(sql: String, prepare: Prepare = identityPrepare): PrepareActionResult =
     prepareSingle(sql, prepare)
 
+  /** Execute SQL on connection and return prepared statement. Closes the statement in a bracket. */
   def prepareSingle(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] =
-    ZIO.environment[BlockingConnection].map { bconn =>
-      val (params, ps) = prepare(bconn.get[Connection].prepareStatement(sql))
-      logger.logQuery(sql, params)
-      ps
+    ZIO.environment[BlockingConnection].flatMap { bconn =>
+      ZIO.bracket(
+        Task(bconn.get[Connection].prepareStatement(sql))
+      )(stmt =>
+          catchAll(Task(stmt.close()))) { stmt =>
+          val (params, ps) = prepare(stmt)
+          logger.logQuery(sql, params)
+          Task(ps)
+        }
     }
 
   def prepareBatchAction(groups: List[BatchGroup]): PrepareBatchActionResult =

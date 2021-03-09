@@ -9,7 +9,7 @@ import zio.{ RIO, Task, ZIO }
 
 import java.sql.{ PreparedStatement, ResultSet }
 
-trait PrepareZioJdbcSpecBase extends ProductSpec {
+trait PrepareZioJdbcSpecBase extends ProductSpec with ZioSpec {
 
   implicit val productEq = new Equality[Product] {
     override def areEqual(a: Product, b: Any): Boolean = b match {
@@ -24,13 +24,13 @@ trait PrepareZioJdbcSpecBase extends ProductSpec {
     products.zipWithIndex.map { case (product, id) => product.copy(id = id.toLong + 1) }
 
   def singleInsert(prefix: Prefix)(prep: RIO[BlockingConnection, PreparedStatement]) = {
-    prep.providePrefix(prefix).bracket(stmt => catchAll(Task(stmt.close()))) { stmt =>
+    prep.provideDs(pool).bracket(stmt => catchAll(Task(stmt.close()))) { stmt =>
       Task(stmt.execute())
     }.defaultRun
   }
 
   def batchInsert(prefix: Prefix)(prep: RIO[BlockingConnection, List[PreparedStatement]]) = {
-    prep.providePrefix(prefix).flatMap(stmts =>
+    prep.provideDs(pool).flatMap(stmts =>
       ZIO.collectAll(
         stmts.map(stmt =>
           Task(stmt).bracket(stmt => catchAll(Task(stmt.close()))) { stmt => Task(stmt.execute()) })
@@ -38,7 +38,7 @@ trait PrepareZioJdbcSpecBase extends ProductSpec {
   }
 
   def extractResults[T](prefix: Prefix)(prep: RIO[BlockingConnection, PreparedStatement])(extractor: ResultSet => T) = {
-    prep.providePrefix(prefix).bracket(stmt => catchAll(Task(stmt.close()))) { stmt =>
+    prep.provideDs(pool).bracket(stmt => catchAll(Task(stmt.close()))) { stmt =>
       Task(stmt.executeQuery()).bracket(rs => catchAll(Task(rs.close()))) { rs =>
         Task(ResultSetExtractor(rs, extractor))
       }

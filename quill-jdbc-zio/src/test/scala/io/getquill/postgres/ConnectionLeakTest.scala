@@ -18,6 +18,7 @@ class ConnectionLeakTest extends ProductSpec with ZioSpec {
   import context._
 
   override def beforeAll = {
+    super.beforeAll()
     context.run(quote(query[Product].delete)).runSyncUnsafe()
     ()
   }

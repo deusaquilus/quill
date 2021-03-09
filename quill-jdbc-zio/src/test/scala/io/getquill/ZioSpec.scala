@@ -1,20 +1,36 @@
 package io.getquill
 
 import io.getquill.context.ZioJdbc._
+import io.getquill.util.LoadConfig
+import org.scalatest.BeforeAndAfterAll
 import zio.{ Runtime, ZIO }
 import zio.stream.{ Sink, ZStream }
 
-trait ZioSpec extends Spec {
+import java.io.Closeable
+import javax.sql.DataSource
+
+trait ZioSpec extends Spec with BeforeAndAfterAll {
   def prefix: Prefix;
+
+  var pool: DataSource with Closeable = _
+
+  override def beforeAll = {
+    super.beforeAll()
+    pool = JdbcContextConfig(LoadConfig(prefix.name)).dataSource
+  }
+
+  override def afterAll(): Unit = {
+    pool.close()
+  }
 
   def accumulate[T](stream: ZStream[BlockingConnection, Throwable, T]): ZIO[BlockingConnection, Throwable, List[T]] =
     stream.run(Sink.collectAll).map(_.toList)
 
   def collect[T](stream: ZStream[BlockingConnection, Throwable, T]): List[T] =
-    Runtime.default.unsafeRun(stream.run(Sink.collectAll).map(_.toList).providePrefix(prefix))
+    Runtime.default.unsafeRun(stream.run(Sink.collectAll).map(_.toList).provideDs(pool))
 
   def collect[T](qzio: ZIO[BlockingConnection, Throwable, T]): T =
-    Runtime.default.unsafeRun(qzio.providePrefix(prefix))
+    Runtime.default.unsafeRun(qzio.provideDs(pool))
 
   implicit class ZStreamTestExt[T](stream: ZStream[BlockingConnection, Throwable, T]) {
     def runSyncUnsafe() = collect[T](stream)

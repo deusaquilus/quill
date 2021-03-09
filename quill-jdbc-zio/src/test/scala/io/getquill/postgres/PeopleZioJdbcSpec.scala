@@ -11,6 +11,7 @@ class PeopleMonixJdbcSpec extends PeopleZioSpec {
   import testContext._
 
   override def beforeAll = {
+    super.beforeAll()
     testContext.transaction {
       for {
         _ <- testContext.run(query[Couple].delete)

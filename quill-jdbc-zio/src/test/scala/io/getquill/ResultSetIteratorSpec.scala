@@ -3,14 +3,13 @@ package io.getquill
 import io.getquill.ZioTestUtil._
 import io.getquill.context.ZioJdbc._
 import io.getquill.util.LoadConfig
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.freespec.AnyFreeSpec
-import org.scalatest.matchers.must.Matchers._
 import zio.Task
 
 import scala.collection.mutable.ArrayBuffer
 
-class ResultSetIteratorSpec extends AnyFreeSpec with BeforeAndAfterAll {
+class ResultSetIteratorSpec extends ZioSpec {
+
+  override def prefix = Prefix("testPostgresDB")
 
   val ds = JdbcContextConfig(LoadConfig("testPostgresDB")).dataSource
 
@@ -29,12 +28,13 @@ class ResultSetIteratorSpec extends AnyFreeSpec with BeforeAndAfterAll {
   )
 
   override def beforeAll = {
+    super.beforeAll()
     ctx.transaction {
       for {
         _ <- ctx.run(query[Person].delete)
         _ <- ctx.run(liftQuery(peopleEntries).foreach(p => peopleInsert(p)))
       } yield ()
-    }.providePrefix(Prefix("testPostgresDB")).defaultRun
+    }.provideDs(pool).defaultRun
   }
 
   "traverses correctly" in {
