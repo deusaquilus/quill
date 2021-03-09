@@ -1,14 +1,13 @@
 package io.getquill
 
-import java.sql.{ PreparedStatement, ResultSet }
+import io.getquill.ZioTestUtil._
+import io.getquill.context.ZioJdbc.{ BlockingConnection, _ }
 import io.getquill.context.jdbc.ResultSetExtractor
 import io.getquill.context.sql.ProductSpec
 import org.scalactic.Equality
 import zio.{ RIO, Task, ZIO }
-import io.getquill.context.ZioJdbc.BlockingConnection
-import io.getquill.context.ZioJdbc._
-import zio.Runtime
-import zio.blocking.Blocking
+
+import java.sql.{ PreparedStatement, ResultSet }
 
 trait PrepareZioJdbcSpecBase extends ProductSpec {
 
@@ -23,10 +22,6 @@ trait PrepareZioJdbcSpecBase extends ProductSpec {
 
   def withOrderedIds(products: List[Product]) =
     products.zipWithIndex.map { case (product, id) => product.copy(id = id.toLong + 1) }
-
-  implicit class RioExt[T](rio: RIO[Blocking, T]) {
-    def defaultRun: T = Runtime.default.unsafeRun(rio)
-  }
 
   def singleInsert(prefix: Prefix)(prep: RIO[BlockingConnection, PreparedStatement]) = {
     prep.providePrefix(prefix).bracket(stmt => catchAll(Task(stmt.close()))) { stmt =>

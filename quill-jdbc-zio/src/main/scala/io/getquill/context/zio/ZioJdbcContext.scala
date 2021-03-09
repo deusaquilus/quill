@@ -68,7 +68,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       runnable.run()
   }
 
-  def withoutAutoCommit[A](f: ZIO[BlockingConnection, Throwable, A]): ZIO[BlockingConnection, Throwable, A] = {
+  private[getquill] def withoutAutoCommit[A](f: ZIO[BlockingConnection, Throwable, A]): ZIO[BlockingConnection, Throwable, A] = {
     for {
       blockingConn <- ZIO.environment[BlockingConnection]
       conn = blockingConn.get[Connection]
@@ -76,6 +76,15 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       r <- Task(conn).bracket(conn => wrapClose(conn.setAutoCommit(autoCommitPrev)))(
         conn => Task { conn.setAutoCommit(false) }.flatMap(_ => f)
       )
+    } yield r
+  }
+
+  private[getquill] def streamWithoutAutoCommit[A](f: ZStream[BlockingConnection, Throwable, A]): ZStream[BlockingConnection, Throwable, A] = {
+    for {
+      blockingConn <- ZStream.environment[BlockingConnection]
+      conn = blockingConn.get[Connection]
+      autoCommitPrev = conn.getAutoCommit
+      r <- ZStream.bracket(Task(conn.setAutoCommit(false)))(_ => wrapClose(conn.setAutoCommit(autoCommitPrev))).flatMap(_ => f)
     } yield r
   }
 
@@ -180,7 +189,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
           for {
             conn <- ZManaged.make(Task(conn))(c => Task.unit)
             ps <- ZManaged.make(Task(prepareStatement(conn)))(ps => wrapClose(ps.close()))
-            rs <- ZManaged.make(Task(ps.executeQuery()))(rs => wrapClose(rs))
+            rs <- ZManaged.make(Task(ps.executeQuery()))(rs => wrapClose(rs.close()))
           } yield (conn, ps, rs)
         }
       }
@@ -201,7 +210,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
 
     // TODO This is a trick to convert Connection to BlockingConnection. Is there a better way to do that e.g. something like contraMapEnv
     val wrapper = (bc: BlockingConnection) => outStream.provide(bc.get)
-    ZStream.access[BlockingConnection](wrapper).flatten
+    streamWithoutAutoCommit(ZStream.access[BlockingConnection](wrapper).flatten)
   }
 
   def guardedChunkFill[A](n: Int)(hasNext: => Boolean, elem: => A): Chunk[A] =

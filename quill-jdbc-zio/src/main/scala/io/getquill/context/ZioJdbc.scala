@@ -64,7 +64,7 @@ object ZioJdbc extends ZioCatchAll {
       blockDs <- ZIO.environment[BlockingDataSource]
       ds = blockDs.get[DataSource]
       blocking = blockDs.get[Blocking.Service]
-      r <- ZIO.bracket(Task(ds.getConnection))(conn => Runner.default.wrapClose(conn.close()))(
+      r <- ZIO.bracket(Task({ val c = ds.getConnection; println("Getting Connection"); c }))(conn => Runner.default.wrapClose({ conn.close(); println("Closing Connection") }))(
         // again, for bracketing to work properly, you have to flatMap the task inside
         conn => Task(conn).flatMap(_ => qzio.provide(Has(conn) ++ Has(blocking)))
       )
@@ -84,6 +84,9 @@ object ZioJdbc extends ZioCatchAll {
       provideOne(dsConf)(qzio.dependOnDsConf())
     def provideDs(ds: DataSource): ZIO[Blocking, Throwable, T] =
       provideOne(ds)(qzio.dependOnDs())
+
+    def provideConnection(conn: Connection): ZIO[Blocking, Throwable, T] =
+      provideOne(conn)(qzio)
   }
 
   private[getquill] def provideOne[P: Tag, T, E: Tag, Rest <: Has[_]: Tag](provision: P)(qzio: ZIO[Has[P] with Rest, E, T]): ZIO[Rest, E, T] =

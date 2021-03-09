@@ -63,7 +63,7 @@ class PeopleMonixJdbcSpec extends PeopleZioSpec {
   }
 
   "Example 11 - streaming" in {
-    collect(testContext.stream(`Ex 11 query`)) should contain theSameElementsAs `Ex 11 expected`
+    collect(testContext.stream(`Ex 11 query`, 4)) should contain theSameElementsAs `Ex 11 expected`
   }
 
   "Example 12 - probe" in {
