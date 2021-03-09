@@ -8,9 +8,9 @@ import io.getquill.util.{ ContextLogger, LoadConfig }
 import io.getquill.{ JdbcContextConfig, NamingStrategy, ReturnAction }
 import izumi.reflect.Tag
 import zio.Exit.{ Failure, Success }
-import zio.blocking.Blocking
 import zio.stream.{ Stream, ZStream }
 import zio.{ Chunk, ChunkBuilder, Has, RIO, Task, UIO, ZIO, ZLayer, ZManaged }
+import ZioContext._
 
 import java.sql.{ Array => _, _ }
 import javax.sql.DataSource
@@ -276,7 +276,7 @@ object ZioJdbcContext {
 
   case class Prefix(name: String)
 
-  val defaultRunner = io.getquill.context.zio.Runner.default
+  private[getquill] val defaultRunner = io.getquill.context.zio.Runner.default
 
   type BlockingConnection = Has[Connection] with Blocking
   type BlockingDataSource = Has[DataSource] with Blocking
@@ -347,7 +347,7 @@ object ZioJdbcContext {
       provideOne(ds)(qzio.dependOnDs())
   }
 
-  def provideOne[P: Tag, T, E: Tag, Rest <: Has[_]: Tag](provision: P)(qzio: ZIO[Has[P] with Rest, E, T]): ZIO[Rest, E, T] =
+  private[getquill] def provideOne[P: Tag, T, E: Tag, Rest <: Has[_]: Tag](provision: P)(qzio: ZIO[Has[P] with Rest, E, T]): ZIO[Rest, E, T] =
     for {
       rest <- ZIO.environment[Rest]
       env = Has(provision) ++ rest

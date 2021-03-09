@@ -1,10 +1,11 @@
 package io.getquill.context.zio
 
-import java.sql.{ Connection, SQLException }
 import io.getquill.context.ContextEffect
 import zio.blocking.Blocking
 import zio.{ Has, RIO, Task, ZIO }
-import zio.internal.Executor
+import io.getquill.context.zio.ZioContext.catchAll
+
+import java.sql.Connection
 
 object Runner {
   type RIOConn[T] = RIO[Has[Connection] with Blocking, T]
@@ -16,12 +17,6 @@ trait Runner extends ContextEffect[Runner.RIOConn] {
   override def wrap[T](t: => T): Runner.RIOConn[T] = Task(t)
   override def push[A, B](result: Runner.RIOConn[A])(f: A => B): Runner.RIOConn[B] = result.map(f)
   override def seq[A](list: List[Runner.RIOConn[A]]): Runner.RIOConn[List[A]] = ZIO.collectAll[Has[Connection] with Blocking, Throwable, A, List](list)
-
-  def catchAll[T, R](task: ZIO[R, Throwable, T]): ZIO[R, Nothing, Any] = task.catchAll {
-    case _: SQLException              => Task.unit // TODO Log something. Can't have anything in the error channel... still needed
-    case _: IndexOutOfBoundsException => Task.unit
-    case e                            => Task.die(e): ZIO[Any, Nothing, T]
-  }
 
   /**
    * Use this method whenever a ResultSet is being wrapped. This has a distinct
