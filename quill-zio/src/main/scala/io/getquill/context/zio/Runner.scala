@@ -3,7 +3,7 @@ package io.getquill.context.zio
 import io.getquill.context.ContextEffect
 import zio.blocking.Blocking
 import zio.{ Has, RIO, Task, ZIO }
-import io.getquill.context.zio.ZioContext.catchAll
+import io.getquill.context.zio.ZioCatchAll.catchAll
 
 import java.sql.Connection
 

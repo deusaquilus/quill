@@ -3,9 +3,7 @@ package io.getquill.integration
 import java.sql.{ Connection, ResultSet }
 import org.scalatest.matchers.should.Matchers._
 import io.getquill._
-import io.getquill.context.zio.ZioJdbcContext.Prefix
-
-import scala.concurrent.duration.Duration
+import io.getquill.context.ZioJdbc.Prefix
 
 /**
  * This is a long-running test that will cause a OutOfMemory exception if

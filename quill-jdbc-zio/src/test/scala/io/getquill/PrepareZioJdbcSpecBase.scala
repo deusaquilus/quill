@@ -1,13 +1,12 @@
 package io.getquill
 
-import java.sql.{ Connection, PreparedStatement, ResultSet }
+import java.sql.{ PreparedStatement, ResultSet }
 import io.getquill.context.jdbc.ResultSetExtractor
 import io.getquill.context.sql.ProductSpec
 import org.scalactic.Equality
 import zio.{ RIO, Task, ZIO }
-import io.getquill.context.zio.ZioContext.catchAll
-import io.getquill.context.zio.ZioJdbcContext.BlockingConnection
-import io.getquill.context.zio.ZioJdbcContext._
+import io.getquill.context.ZioJdbc.BlockingConnection
+import io.getquill.context.ZioJdbc._
 import zio.Runtime
 import zio.blocking.Blocking
 

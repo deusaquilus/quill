@@ -1,6 +1,6 @@
 package io.getquill
 
-import io.getquill.context.zio.ZioJdbcContext.{ BlockingConnection, _ }
+import io.getquill.context.ZioJdbc._
 import zio.{ Runtime, ZIO }
 import zio.stream.{ Sink, ZStream }
 

@@ -3,10 +3,10 @@ package io.getquill.context.zio
 import io.getquill.NamingStrategy
 import io.getquill.context.{ Context, StreamingContext }
 import zio.blocking.Blocking
-import zio.{ Has, RIO, Task, ZIO }
 import zio.stream.ZStream
+import zio.{ Has, RIO, Task, ZIO }
 
-import java.sql.{ Connection, SQLException }
+import java.sql.SQLException
 
 trait ZioContext[Idiom <: io.getquill.idiom.Idiom, Naming <: NamingStrategy] extends Context[Idiom, Naming]
   with StreamingContext[Idiom, Naming] {
@@ -22,7 +22,8 @@ trait ZioContext[Idiom <: io.getquill.idiom.Idiom, Naming <: NamingStrategy] ext
   def executeQuerySingle[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[Has[Session] with Blocking, T]
 }
 
-object ZioContext {
+object ZioCatchAll extends ZioCatchAll
+trait ZioCatchAll {
   private[getquill] def catchAll[T, R](task: ZIO[R, Throwable, T]): ZIO[R, Nothing, Any] = task.catchAll {
     case _: SQLException              => Task.unit // TODO Log something. Can't have anything in the error channel... still needed
     case _: IndexOutOfBoundsException => Task.unit

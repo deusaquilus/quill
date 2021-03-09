@@ -6,13 +6,13 @@ import io.getquill.context.sql.idiom.SqlIdiom
 import io.getquill.util.ContextLogger
 import zio.{ Has, RIO, ZIO }
 import zio.blocking.Blocking
+import io.getquill.context.ZioJdbc._
 
 import java.sql.{ Connection, PreparedStatement, ResultSet }
 
 trait ZioPrepareContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends ZioContext[Dialect, Naming]
   with PrepareContext {
 
-  import ZioJdbcContext._
   private[getquill] val logger = ContextLogger(classOf[ZioPrepareContext[_, _]])
 
   override type PrepareRow = PreparedStatement

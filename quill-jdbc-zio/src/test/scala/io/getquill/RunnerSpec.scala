@@ -1,7 +1,7 @@
 package io.getquill
 
 import io.getquill.context.zio.Runner
-import io.getquill.context.zio.ZioJdbcContext.Prefix
+import io.getquill.context.ZioJdbc.Prefix
 import org.scalatest.matchers.should.Matchers._
 import zio.Task
 

@@ -1,20 +1,18 @@
 package io.getquill.postgres
 
 import java.util.UUID
-import io.getquill.{ JdbcContextConfig, Literal, PostgresZioJdbcContext, TestEntities, ZioSpec }
+import io.getquill.{ JdbcContextConfig, Literal, PostgresZioJdbcContext, ZioSpec }
 import io.getquill.context.sql.ProductSpec
-import io.getquill.context.zio.ZioJdbcContext
-import io.getquill.context.zio.ZioJdbcContext.Prefix
+import io.getquill.context.ZioJdbc.Prefix
 import io.getquill.util.LoadConfig
-import io.getquill.context.zio.ZioJdbcContext._
+import io.getquill.context.ZioJdbc._
 import zio.Runtime
 
 import scala.util.Random
 
-// TODO Need self-closing connection layer for this to work
 class ConnectionLeakTest extends ProductSpec with ZioSpec {
 
-  override def prefix: ZioJdbcContext.Prefix = Prefix("testPostgresLeakDB")
+  override def prefix: Prefix = Prefix("testPostgresLeakDB")
   val dataSource = JdbcContextConfig(LoadConfig("testPostgresLeakDB")).dataSource
   val context = new PostgresZioJdbcContext(Literal)
   import context._
