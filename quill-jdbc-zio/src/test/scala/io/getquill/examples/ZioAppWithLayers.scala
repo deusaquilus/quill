@@ -1,11 +1,10 @@
 package io.getquill.examples
 
 import io.getquill._
-import io.getquill.util.LoadConfig
-import zio.{ App, ExitCode, Has, Task, URIO, ZLayer, ZManaged }
+import io.getquill.context.ZioJdbc.Layers
+import zio.blocking.blocking
 import zio.console.putStrLn
-import io.getquill.context.ZioJdbc.{ Layers }
-import zio.blocking.{ Blocking, blocking }
+import zio.{ App, ExitCode, URIO }
 
 object ZioAppWithLayers extends App {
 
@@ -27,6 +26,4 @@ object ZioAppWithLayers extends App {
         .provideCustomLayer(zioConn).exitCode
     )
   }
-
-  // NOTE: provideCustomLayer argument whatever zio does not
 }
