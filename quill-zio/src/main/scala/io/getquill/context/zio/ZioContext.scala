@@ -22,21 +22,3 @@ trait ZioContext[Idiom <: io.getquill.idiom.Idiom, Naming <: NamingStrategy] ext
   def executeQuery[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[Has[Session] with Blocking, List[T]]
   def executeQuerySingle[T](sql: String, prepare: Prepare = identityPrepare, extractor: Extractor[T] = identityExtractor): RIO[Has[Session] with Blocking, T]
 }
-
-object ZioCatchAll extends ZioCatchAll
-trait ZioCatchAll {
-  private[getquill] val logger = ContextLogger(classOf[ZioContext[_, _]]).underlying
-
-  // TODO if connection.close fails or something like that, should we really consider it a recoverable error?
-  // TODO do we need to call a 'drain' somewhere here?
-  private[getquill] def catchAll[T, R](task: ZIO[R, Throwable, T]): ZIO[R, Nothing, Any] = task.catchAll {
-    case e: SQLException =>
-      logger.error("Caught and ignored recoverable exception.", e)
-      Task.unit
-    case e: IndexOutOfBoundsException =>
-      logger.error("Caught and ignored recoverable exception.", e)
-      Task.unit
-    case e =>
-      Task.die(e): ZIO[Any, Nothing, T]
-  }
-}

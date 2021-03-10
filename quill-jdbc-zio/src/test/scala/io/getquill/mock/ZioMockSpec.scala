@@ -12,7 +12,6 @@ import io.getquill.context.ZioJdbc._
 import org.scalatest.freespec.AnyFreeSpec
 
 import scala.reflect.ClassTag
-import scala.util.Try
 
 class ZioMockSpec extends AnyFreeSpec with MockitoSugar { //with AsyncMockitoSugar
   import scala.reflect.runtime.{ universe => ru }
@@ -101,16 +100,14 @@ class ZioMockSpec extends AnyFreeSpec with MockitoSugar { //with AsyncMockitoSug
     val ctx = new PostgresZioJdbcContext(Literal)
     import ctx._
 
-    val results = Try(
+    val resultMsg =
       stream(query[Person])
         .fold(Seq[Person]())({ case (l, p) => p +: l })
         .map(_.reverse)
-        .provideDs(ds).defaultRun
-    )
+        .provideDs(ds).foldCause(cause => cause.prettyPrint, _ => "").defaultRun
 
-    results must matchPattern {
-      case scala.util.Failure(e) if (e.getMessage.contains(msg) && e.getMessage.contains("Fiber failed.")) =>
-    }
+    resultMsg.contains("Fiber failed.") mustBe true
+    resultMsg.contains(msg) mustBe true
 
     // In test suite verifications come after
     val order = inOrder(conn)
@@ -138,13 +135,14 @@ class ZioMockSpec extends AnyFreeSpec with MockitoSugar { //with AsyncMockitoSug
 
     // In this case, instead of catching the error inside the observable, let it propogate to the top
     // and make sure that the connection is closed anyhow
-    val results =
+    val resultMsg =
       stream(query[Person])
         .fold(Seq[Person]())({ case (l, p) => p +: l })
         .map(_.reverse)
-        .provideDs(ds).defaultRun
+        .provideDs(ds).foldCause(cause => cause.prettyPrint, _ => "").defaultRun
 
-    results must equal(people)
+    resultMsg.contains("Fiber failed.") mustBe true
+    resultMsg.contains(msg) mustBe true
 
     // In test suite verifications come after
     val order = inOrder(Seq[AnyRef](conn, stmt, rs): _*)

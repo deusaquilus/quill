@@ -3,7 +3,6 @@ package io.getquill.context.zio
 import io.getquill.context.ContextEffect
 import zio.blocking.Blocking
 import zio.{ Has, RIO, Task, ZIO }
-import io.getquill.context.zio.ZioCatchAll.catchAll
 
 import java.sql.Connection
 
@@ -24,5 +23,5 @@ trait Runner extends ContextEffect[Runner.RIOConn] {
    * as opposed to failing the surrounding task.
    */
   // TODO Something about a drain that needs to happen here?
-  def wrapClose(t: => Any): ZIO[Any, Nothing, Unit] = catchAll(Task(t)).unit
+  //def wrapClose(t: => Any): ZIO[Any, Nothing, Unit] = ???
 }

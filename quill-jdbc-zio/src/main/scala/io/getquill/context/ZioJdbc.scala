@@ -3,7 +3,6 @@ package io.getquill.context
 import com.typesafe.config.Config
 import io.getquill.JdbcContextConfig
 import _root_.zio.{ Has, Task, ZIO, ZLayer, ZManaged }
-import zio.ZioCatchAll
 import io.getquill.util.LoadConfig
 import izumi.reflect.Tag
 
@@ -11,7 +10,7 @@ import java.io.Closeable
 import java.sql.Connection
 import javax.sql.DataSource
 
-object ZioJdbc extends ZioCatchAll {
+object ZioJdbc {
   import _root_.zio.blocking._
 
   /** Describes a single HOCON Jdbc Config block */
@@ -34,13 +33,13 @@ object ZioJdbc extends ZioCatchAll {
       result <- blocking.effectBlocking(mapping(from))
     } yield Has.allOf(result, blocking)).toLayerMany
 
-  private[getquill] def mapBracketGeneric[From: Tag, To: Tag](mapping: From => To)(close: To => Unit): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] = {
+  private[getquill] def mapAutoCloseableGeneric[From: Tag, To <: AutoCloseable: Tag](mapping: From => To): ZLayer[Has[From] with Blocking, Throwable, Has[To] with Blocking] = {
     val managed =
       for {
         fromBlocking <- ZManaged.environment[Has[From] with Blocking]
         from = fromBlocking.get[From]
         blocking = fromBlocking.get[Blocking.Service]
-        r <- ZManaged.make(Task(mapping(from)))(to => catchAll(Task(close(to))))
+        r <- ZManaged.fromAutoCloseable(Task(mapping(from)))
       } yield Has(r) ++ Has(blocking)
     ZLayer.fromManagedMany(managed)
   }
@@ -51,9 +50,9 @@ object ZioJdbc extends ZioCatchAll {
     val configToJdbcConfig: ZLayer[BlockingConfig, Throwable, BlockingJdbcContextConfig] =
       mapGeneric[Config, JdbcContextConfig]((from: Config) => JdbcContextConfig(from))
     val jdbcConfigToDataSource: ZLayer[BlockingJdbcContextConfig, Throwable, BlockingDataSource] =
-      mapBracketGeneric[JdbcContextConfig, DataSource with Closeable]((from: JdbcContextConfig) => from.dataSource)(ds => ds.close())
+      mapAutoCloseableGeneric[JdbcContextConfig, DataSource with Closeable]((from: JdbcContextConfig) => from.dataSource)
     val dataSourceToConnection: ZLayer[BlockingDataSource, Throwable, BlockingConnection] =
-      mapBracketGeneric[DataSource with Closeable, Connection]((from: DataSource) => from.getConnection)(conn => conn.close())
+      mapAutoCloseableGeneric[DataSource with Closeable, Connection]((from: DataSource) => from.getConnection)
   }
 
   import Layers._

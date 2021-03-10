@@ -38,18 +38,6 @@ trait ZioPrepareContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends Z
       }
   }
 
-  //  def prepareSingle1(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] = {
-  //    ZIO.bracket(
-  //      ZIO.environment[BlockingConnection].flatMap { bconn =>
-  //        Task(bconn.get[Connection].prepareStatement(sql))
-  //      }
-  //    )(stmt =>
-  //      catchAll(Task(stmt.close()))) { stmt =>
-  //      val (params, ps) = prepare(stmt)
-  //      logger.logQuery(sql, params)
-  //      Task(ps)
-  //    }
-
   def prepareBatchAction(groups: List[BatchGroup]): PrepareBatchActionResult =
     ZIO.collectAll[Has[Connection] with Blocking, Throwable, PrepareRow, List] {
       val batches = groups.flatMap {

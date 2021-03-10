@@ -39,7 +39,7 @@ class ResultSetIteratorSpec extends ZioSpec {
 
   "traverses correctly" in {
     val results =
-      Task(ds.getConnection).bracket(conn => catchAll(Task(conn.close()))) { conn =>
+      Task(ds.getConnection).bracketAuto { conn =>
         Task {
           val stmt = conn.prepareStatement("select * from person")
           val rs = new ResultSetIterator[String](stmt.executeQuery(), extractor = (rs) => { rs.getString(1) })
@@ -54,7 +54,7 @@ class ResultSetIteratorSpec extends ZioSpec {
 
   "can take head element" in {
     val result =
-      Task(ds.getConnection).bracket(conn => catchAll(Task(conn.close()))) { conn =>
+      Task(ds.getConnection).bracketAuto { conn =>
         Task {
           val stmt = conn.prepareStatement("select * from person where name = 'Alex'")
           val rs = new ResultSetIterator(stmt.executeQuery(), extractor = (rs) => { rs.getString(1) })

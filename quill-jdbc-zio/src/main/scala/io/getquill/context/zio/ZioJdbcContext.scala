@@ -8,7 +8,7 @@ import io.getquill.util.ContextLogger
 import io.getquill.{ NamingStrategy, ReturnAction }
 import zio.Exit.{ Failure, Success }
 import zio.stream.{ Stream, ZStream }
-import zio.{ Chunk, ChunkBuilder, RIO, Task, UIO, ZIO, ZManaged }
+import zio.{ Cause, Chunk, ChunkBuilder, RIO, Task, UIO, ZIO, ZManaged }
 
 import java.sql.{ Array => _, _ }
 import javax.sql.DataSource
@@ -77,7 +77,6 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
     super.prepareBatchAction(groups)
 
   override protected val effect: Runner = Runner.default
-  import effect._
 
   /** ZIO Contexts do not managed DB connections so this is a no-op */
   override def close(): Unit = ()
@@ -96,7 +95,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       blockingConn <- ZIO.environment[BlockingConnection]
       conn = blockingConn.get[Connection]
       autoCommitPrev = conn.getAutoCommit
-      r <- Task(conn).bracket(conn => wrapClose(conn.setAutoCommit(autoCommitPrev)))(
+      r <- Task(conn).bracket(conn => UIO(conn.setAutoCommit(autoCommitPrev)))(
         conn => Task { conn.setAutoCommit(false) }.flatMap(_ => f)
       )
     } yield r
@@ -107,19 +106,21 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       blockingConn <- ZStream.environment[BlockingConnection]
       conn = blockingConn.get[Connection]
       autoCommitPrev = conn.getAutoCommit
-      r <- ZStream.bracket(Task(conn.setAutoCommit(false)))(_ => wrapClose(conn.setAutoCommit(autoCommitPrev))).flatMap(_ => f)
+      r <- ZStream.bracket(Task(conn.setAutoCommit(false)))(_ => UIO(conn.setAutoCommit(autoCommitPrev))).flatMap(_ => f)
     } yield r
   }
 
   def transaction[A](f: RIO[BlockingConnection, A]): RIO[BlockingConnection, A] = {
-    def die = Task.die(new IllegalStateException("The task was cancelled in the middle of a transaction."))
     withoutAutoCommit(ZIO.environment[BlockingConnection].flatMap(conn =>
-      f.onInterrupt(die).onExit {
+      f.onExit {
         case Success(_) =>
           UIO(conn.get.commit())
         case Failure(cause) =>
-          // TODO Are we really catching the result of the conn.rollback() Task's exception?
-          catchAll(Task(conn.get.rollback()) *> Task.halt(cause))
+          UIO(conn.get.rollback()).foldCauseM(
+            // NOTE: cause.flatMap(Cause.die) means wrap up the throwable failures into die failures, can only do if E param is Throwable (can also do .orDie at the end)
+            rollbackFailCause => ZIO.halt(cause.flatMap(Cause.die) ++ rollbackFailCause),
+            _ => ZIO.halt(cause.flatMap(Cause.die)) // or ZIO.halt(cause).orDie
+          )
       }))
   }
 
@@ -211,8 +212,8 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
         ZStream.managed {
           for {
             conn <- ZManaged.make(Task(conn))(c => Task.unit)
-            ps <- ZManaged.make(Task(prepareStatement(conn)))(ps => wrapClose(ps.close()))
-            rs <- ZManaged.make(Task(ps.executeQuery()))(rs => wrapClose(rs.close()))
+            ps <- ZManaged.fromAutoCloseable(Task(prepareStatement(conn)))
+            rs <- ZManaged.fromAutoCloseable(Task(ps.executeQuery()))
           } yield (conn, ps, rs)
         }
       }
@@ -231,9 +232,8 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
           }
       }
 
-    // TODO This is a trick to convert Connection to BlockingConnection. Is there a better way to do that e.g. something like contraMapEnv
-    val wrapper = (bc: BlockingConnection) => outStream.provide(bc.get)
-    streamWithoutAutoCommit(ZStream.access[BlockingConnection](wrapper).flatten)
+    val typedStream = outStream.provideSome((bc: BlockingConnection) => bc.get)
+    streamWithoutAutoCommit(typedStream)
   }
 
   def guardedChunkFill[A](n: Int)(hasNext: => Boolean, elem: => A): Chunk[A] =

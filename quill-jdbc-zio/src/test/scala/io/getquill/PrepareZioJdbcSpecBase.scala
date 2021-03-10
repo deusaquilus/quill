@@ -5,8 +5,7 @@ import io.getquill.context.ZioJdbc.{ BlockingConnection, _ }
 import io.getquill.context.jdbc.ResultSetExtractor
 import io.getquill.context.sql.ProductSpec
 import org.scalactic.Equality
-import zio.blocking.Blocking
-import zio.{ Has, RIO, Task, ZIO }
+import zio.{ RIO, Task, ZIO }
 
 import java.sql.{ PreparedStatement, ResultSet }
 
@@ -26,20 +25,20 @@ trait PrepareZioJdbcSpecBase extends ProductSpec with ZioSpec {
 
   def singleInsert(prep: RIO[BlockingConnection, PreparedStatement]) = {
     prep.flatMap(stmt =>
-      Task(stmt).bracket(stmt => catchAll(Task(stmt.close()))) { stmt => Task(stmt.execute()) }).provideDs(pool).defaultRun
+      Task(stmt).bracketAuto { stmt => Task(stmt.execute()) }).provideDs(pool).defaultRun
   }
 
   def batchInsert(prep: RIO[BlockingConnection, List[PreparedStatement]]) = {
     prep.flatMap(stmts =>
       ZIO.collectAll(
         stmts.map(stmt =>
-          Task(stmt).bracket(stmt => catchAll(Task(stmt.close()))) { stmt => Task(stmt.execute()) })
+          Task(stmt).bracketAuto { stmt => Task(stmt.execute()) })
       )).provideDs(pool).defaultRun
   }
 
   def extractResults[T](prep: RIO[BlockingConnection, PreparedStatement])(extractor: ResultSet => T) = {
-    prep.bracket(stmt => catchAll(Task(stmt.close()))) { stmt =>
-      Task(stmt.executeQuery()).bracket(rs => catchAll(Task(rs.close()))) { rs =>
+    prep.bracketAuto { stmt =>
+      Task(stmt.executeQuery()).bracketAuto { rs =>
         Task(ResultSetExtractor(rs, extractor))
       }
     }.provideDs(pool).defaultRun
