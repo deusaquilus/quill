@@ -28,17 +28,27 @@ trait ZioPrepareContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] extends Z
     prepareSingle(sql, prepare)
 
   /** Execute SQL on connection and return prepared statement. Closes the statement in a bracket. */
-  def prepareSingle(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] =
-    ZIO.environment[BlockingConnection].flatMap { bconn =>
-      ZIO.bracket(
-        Task(bconn.get[Connection].prepareStatement(sql))
-      )(stmt =>
-          catchAll(Task(stmt.close()))) { stmt =>
-          val (params, ps) = prepare(stmt)
-          logger.logQuery(sql, params)
-          Task(ps)
-        }
-    }
+  def prepareSingle(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] = {
+    ZIO.environment[BlockingConnection]
+      .mapEffect(bconn => bconn.get[Connection].prepareStatement(sql))
+      .mapEffect { stmt =>
+        val (params, ps) = prepare(stmt)
+        logger.logQuery(sql, params)
+        ps
+      }
+  }
+
+  //  def prepareSingle1(sql: String, prepare: Prepare = identityPrepare): RIO[BlockingConnection, PreparedStatement] = {
+  //    ZIO.bracket(
+  //      ZIO.environment[BlockingConnection].flatMap { bconn =>
+  //        Task(bconn.get[Connection].prepareStatement(sql))
+  //      }
+  //    )(stmt =>
+  //      catchAll(Task(stmt.close()))) { stmt =>
+  //      val (params, ps) = prepare(stmt)
+  //      logger.logQuery(sql, params)
+  //      Task(ps)
+  //    }
 
   def prepareBatchAction(groups: List[BatchGroup]): PrepareBatchActionResult =
     ZIO.collectAll[Has[Connection] with Blocking, Throwable, PrepareRow, List] {

@@ -3,7 +3,7 @@ package io.getquill.context
 import com.typesafe.config.Config
 import io.getquill.JdbcContextConfig
 import _root_.zio.{ Has, Task, ZIO, ZLayer, ZManaged }
-import zio.{ ZioCatchAll }
+import zio.ZioCatchAll
 import io.getquill.util.LoadConfig
 import izumi.reflect.Tag
 
@@ -63,12 +63,31 @@ object ZioJdbc extends ZioCatchAll {
   def configureFromDs[T](qzio: ZIO[BlockingConnection, Throwable, T]): ZIO[BlockingDataSource, Throwable, T] =
     qzio.provideLayer(dataSourceToConnection)
 
-  // TODO comments
   implicit class QuillZioExt[T](qzio: ZIO[BlockingConnection, Throwable, T]) {
+    /**
+     * Allows the user to specify `Has[DataSource]` instead of `Has[Connection]` for a Quill ZIO value i.e.
+     * Converts:<br>
+     *   `ZIO[BlockingConnection, Throwable, T]` to `ZIO[BlockingDataSource, Throwable, T]` a.k.a.<br>
+     *   `ZIO[Has[Connection] with Blocking, Throwable, T]` to `ZIO[Has[DataSource] with Blocking, Throwable, T]` a.k.a.<br>
+     */
     def dependOnDs(): ZIO[BlockingDataSource, Throwable, T] = configureFromDs(qzio)
 
+    /**
+     * Allows the user to specify JDBC `DataSource` instead of `BlockingConnection` for a Quill ZIO value i.e.
+     * Provides a DataSource object which internally brackets `dataSource.getConnection` and `connection.close()`.
+     * This effectively converts:<br>
+     *   `ZIO[BlockingConnection, Throwable, T]` to `ZIO[Blocking, Throwable, T]` a.k.a.<br>
+     *   `ZIO[Has[Connection] with Blocking, Throwable, T]` to `ZIO[Blocking, Throwable, T]` a.k.a.<br>
+     */
     def provideDs(ds: DataSource with Closeable): ZIO[Blocking, Throwable, T] =
       provideOne(ds)(qzio.dependOnDs())
+
+    /**
+     * Allows the user to specify JDBC `Connection` instead of `BlockingConnection` for a Quill ZIO value i.e.
+     * Provides a Connection object which converts:<br>
+     *   `ZIO[BlockingConnection, Throwable, T]` to `ZIO[Blocking, Throwable, T]` a.k.a.<br>
+     *   `ZIO[Has[Connection] with Blocking, Throwable, T]` to `ZIO[Blocking, Throwable, T]` a.k.a.<br>
+     */
     def provideConnection(conn: Connection): ZIO[Blocking, Throwable, T] =
       provideOne(conn)(qzio)
   }

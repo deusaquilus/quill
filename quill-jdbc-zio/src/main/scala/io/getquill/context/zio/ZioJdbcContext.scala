@@ -24,16 +24,16 @@ import scala.util.Try
  * Instead it is a `Has[Connection] with Has[Blocking.Service]` which is type-alised as
  * `BlockingConnection` hence methods in this context return `ZIO[BlockingConnection, Throwable, T]`.
  *
- * If you have a zio-app, using this context is fairly straightforward:
+ * If you have a zio-app, using this context is fairly straightforward but requires some setup:
+ * TODO Example
+ *
+ * Various methods in the `io.getquill.context.ZioJdbc` can assist in doing this, for example, you can
+ * provide a `DataSource`` instead of a `Connection` like this (note that the Connection has a closing bracket).
  * TODO Example
  *
  * If you are using a Plain Scala app however, you will have to setup a Datasource, grab a connection
  * from it and then execute a query using this context. Be sure to properly bracket these resources
  * with a `.close()` wherever necessary.
- * TODO Example
- *
- * Various methods in the `io.getquill.context.ZioJdbc` can assist in doing this, for example, you can
- * provide a `DataSource`` instead of a `Connection` like this (note that the Connection has a closing bracket).
  * TODO Example
  *
  * Note that using this context, resources are aggressively bracketed. For example,
