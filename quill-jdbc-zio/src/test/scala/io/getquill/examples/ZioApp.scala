@@ -14,7 +14,7 @@ object ZioApp extends App {
 
   val zioConn =
     ZLayer.fromManaged(for {
-      ds <- ZManaged.fromAutoCloseable(Task(JdbcContextConfig(LoadConfig("testSqlServerDB")).dataSource))
+      ds <- ZManaged.fromAutoCloseable(Task(JdbcContextConfig(LoadConfig("testPostgresDB")).dataSource))
       conn <- ZManaged.fromAutoCloseable(Task(ds.getConnection))
     } yield conn)
 

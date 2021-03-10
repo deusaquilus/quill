@@ -25,7 +25,7 @@ trait PrepareZioJdbcSpecBase extends ProductSpec with ZioSpec {
 
   def singleInsert(prep: RIO[BlockingConnection, PreparedStatement]) = {
     prep.flatMap(stmt =>
-      Task(stmt).bracketAuto { stmt => Task(stmt.execute()) }).provideDs(pool).defaultRun
+      Task(stmt).bracketAuto { stmt => Task(stmt.execute()) }).provideConnectionFrom(pool).defaultRun
   }
 
   def batchInsert(prep: RIO[BlockingConnection, List[PreparedStatement]]) = {
@@ -33,7 +33,7 @@ trait PrepareZioJdbcSpecBase extends ProductSpec with ZioSpec {
       ZIO.collectAll(
         stmts.map(stmt =>
           Task(stmt).bracketAuto { stmt => Task(stmt.execute()) })
-      )).provideDs(pool).defaultRun
+      )).provideConnectionFrom(pool).defaultRun
   }
 
   def extractResults[T](prep: RIO[BlockingConnection, PreparedStatement])(extractor: ResultSet => T) = {
@@ -41,7 +41,7 @@ trait PrepareZioJdbcSpecBase extends ProductSpec with ZioSpec {
       Task(stmt.executeQuery()).bracketAuto { rs =>
         Task(ResultSetExtractor(rs, extractor))
       }
-    }.provideDs(pool).defaultRun
+    }.provideConnectionFrom(pool).defaultRun
   }
 
   def extractProducts(prep: RIO[BlockingConnection, PreparedStatement]) =

@@ -27,10 +27,10 @@ trait ZioSpec extends Spec with BeforeAndAfterAll {
     stream.run(Sink.collectAll).map(_.toList)
 
   def collect[T](stream: ZStream[BlockingConnection, Throwable, T]): List[T] =
-    Runtime.default.unsafeRun(stream.run(Sink.collectAll).map(_.toList).provideDs(pool))
+    Runtime.default.unsafeRun(stream.run(Sink.collectAll).map(_.toList).provideConnectionFrom(pool))
 
   def collect[T](qzio: ZIO[BlockingConnection, Throwable, T]): T =
-    Runtime.default.unsafeRun(qzio.provideDs(pool))
+    Runtime.default.unsafeRun(qzio.provideConnectionFrom(pool))
 
   implicit class ZStreamTestExt[T](stream: ZStream[BlockingConnection, Throwable, T]) {
     def runSyncUnsafe() = collect[T](stream)

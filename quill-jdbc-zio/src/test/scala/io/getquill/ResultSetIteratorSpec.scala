@@ -34,7 +34,7 @@ class ResultSetIteratorSpec extends ZioSpec {
         _ <- ctx.run(query[Person].delete)
         _ <- ctx.run(liftQuery(peopleEntries).foreach(p => peopleInsert(p)))
       } yield ()
-    }.provideDs(pool).defaultRun
+    }.provideConnectionFrom(pool).defaultRun
   }
 
   "traverses correctly" in {
