@@ -4,9 +4,7 @@ import com.typesafe.config.Config
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 
-import java.io.Closeable
 import java.util.Properties
-import javax.sql.DataSource
 import scala.util.control.NonFatal
 
 case class JdbcContextConfig(config: Config) {
