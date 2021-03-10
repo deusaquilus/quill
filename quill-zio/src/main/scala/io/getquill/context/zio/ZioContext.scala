@@ -2,12 +2,9 @@ package io.getquill.context.zio
 
 import io.getquill.NamingStrategy
 import io.getquill.context.{ Context, StreamingContext }
-import io.getquill.util.ContextLogger
 import zio.blocking.Blocking
 import zio.stream.ZStream
-import zio.{ Has, RIO, Task, ZIO }
-
-import java.sql.SQLException
+import zio.{ Has, RIO }
 
 trait ZioContext[Idiom <: io.getquill.idiom.Idiom, Naming <: NamingStrategy] extends Context[Idiom, Naming]
   with StreamingContext[Idiom, Naming] {

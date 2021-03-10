@@ -2,11 +2,11 @@ package io.getquill.context.zio
 
 import io.getquill.NamingStrategy
 import io.getquill.context.PrepareContext
+import io.getquill.context.ZioJdbc._
 import io.getquill.context.sql.idiom.SqlIdiom
 import io.getquill.util.ContextLogger
-import zio.{ Has, RIO, Task, ZIO }
 import zio.blocking.Blocking
-import io.getquill.context.ZioJdbc._
+import zio.{ Has, RIO, ZIO }
 
 import java.sql.{ Connection, PreparedStatement, ResultSet }
 
