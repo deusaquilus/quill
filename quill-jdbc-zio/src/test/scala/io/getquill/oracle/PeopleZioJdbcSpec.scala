@@ -1,4 +1,4 @@
-package io.getquill.postgres
+package io.getquill.oracle
 
 import io.getquill.PeopleZioSpec
 import io.getquill.context.ZioJdbc.Prefix
@@ -6,7 +6,7 @@ import org.scalatest.matchers.should.Matchers._
 
 class PeopleZioJdbcSpec extends PeopleZioSpec {
 
-  override def prefix: Prefix = Prefix("testPostgresDB")
+  def prefix = Prefix("testOracleDB")
   val context = testContext
   import testContext._
 
@@ -64,10 +64,6 @@ class PeopleZioJdbcSpec extends PeopleZioSpec {
   }
 
   "Example 11 - streaming" in {
-    collect(testContext.stream(`Ex 11 query`, 4)) should contain theSameElementsAs `Ex 11 expected`
-  }
-
-  "Example 12 - probe" in {
-    probe("select 1").toOption mustBe defined
+    collect(testContext.stream(`Ex 11 query`)) should contain theSameElementsAs `Ex 11 expected`
   }
 }
