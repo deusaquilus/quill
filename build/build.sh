@@ -2,11 +2,13 @@
 
 set -e
 
+echo "Start build modules: $modules"
+
 export POSTGRES_HOST=127.0.0.1
-export POSTGRES_PORT=5432
+export POSTGRES_PORT=15432
 
 export MYSQL_HOST=127.0.0.1
-export MYSQL_PORT=3306
+export MYSQL_PORT=13306
 
 export SQL_SERVER_HOST=127.0.0.1
 export SQL_SERVER_PORT=11433
@@ -24,7 +26,7 @@ export JVM_OPTS="-Dquill.macro.log=false -Dquill.scala.version=$TRAVIS_SCALA_VER
 
 modules=$1
 
-echo "Modules: $modules"
+
 
 function show_mem() {
     free -m | awk 'NR==2{printf "Memory Usage: %s/%sMB (%.2f%%)\n", $3,$2,$3*100/$2 }'
@@ -68,11 +70,11 @@ fi
 function wait_for_databases() {
     show_mem
 
-    sbt clean scalariformFormat test:scalariformFormat
+    sbt scalariformFormat test:scalariformFormat
     sbt checkUnformattedFiles
 
     # Start sbt compilation and database setup in parallel
-    sbt -Dmodules=base -Doracle=true $SBT_ARGS test & COMPILE=$!
+    sbt -Dmodules=base -Doracle=true $SBT_ARGS  test & COMPILE=$!
     ./build/setup_databases.sh & SETUP=$!
 
     # Wait on database setup. If it has failed then kill compilation process and exit with error
@@ -101,11 +103,11 @@ function wait_for_databases() {
 function wait_for_mysql_postgres() {
     show_mem
 
-    sbt clean scalariformFormat test:scalariformFormat
+    sbt scalariformFormat test:scalariformFormat
     sbt checkUnformattedFiles
 
     # Start sbt compilation and database setup in parallel
-    sbt -Dmodules=base $SBT_ARGS test & COMPILE=$!
+    sbt -Dmodules=base $SBT_ARGS  test & COMPILE=$!
     ./build/setup_mysql_postgres_databases.sh & SETUP=$!
 
     # Wait on database setup. If it has failed then kill compilation process and exit with error
@@ -133,9 +135,9 @@ function wait_for_mysql_postgres() {
 function wait_for_bigdata() {
     show_mem
 
-    sbt clean scalariformFormat test:scalariformFormat
+    sbt scalariformFormat test:scalariformFormat
     sbt checkUnformattedFiles
-    sbt clean $SBT_ARGS quill-coreJVM/test:compile & COMPILE=$!
+    sbt $SBT_ARGS quill-coreJVM/test:compile & COMPILE=$!
     ./build/setup_bigdata.sh & SETUP=$!
 
     wait $SETUP
@@ -159,34 +161,34 @@ function wait_for_bigdata() {
 
 function db_build() {
     wait_for_databases
-    sbt -Dmodules=db $SBT_ARGS test doc
+    ./build/aware_run.sh sbt -Dmodules=db $SBT_ARGS test
 }
 
 function js_build() {
     show_mem
     export JVM_OPTS="-Dquill.macro.log=false -Dquill.scala.version=$TRAVIS_SCALA_VERSION -Xms1024m -Xmx4g -Xss5m -XX:ReservedCodeCacheSize=256m -XX:+TieredCompilation -XX:+CMSClassUnloadingEnabled -XX:+UseConcMarkSweepGC"
-    sbt -Dmodules=js $SBT_ARGS test doc
+    sbt -Dmodules=js $SBT_ARGS test
 }
 
 function async_build() {
     wait_for_mysql_postgres
-    sbt -Dmodules=async $SBT_ARGS test doc
+    sbt -Dmodules=async $SBT_ARGS test
 }
 
 function codegen_build() {
     wait_for_databases
-    sbt -Dmodules=codegen $SBT_ARGS test doc
+    sbt -Dmodules=codegen $SBT_ARGS test
 }
 
 function bigdata_build() {
     wait_for_bigdata
-    sbt -Dmodules=bigdata $SBT_ARGS test doc
+    sbt -Dmodules=bigdata $SBT_ARGS test
 }
 
 function full_build() {
     wait_for_databases
     wait_for_bigdata
-    sbt $SBT_ARGS test tut doc
+    sbt $SBT_ARGS test
 }
 
 if [[ (! -z "$DOCKER_USERNAME") && (! -z "$DOCKER_USERNAME") ]]; then
@@ -203,6 +205,9 @@ else
 
   echo "Not Logging into Docker for $TRAVIS_EVENT_TYPE build, restarting Docker using GCR mirror"
 fi
+
+echo "Building cache:"
+find ~/.cache/sbt-build/ -type d || true
 
 if [[ $modules == "db" ]]; then
     echo "Build Script: Doing Database Build"
