@@ -161,7 +161,7 @@ function db_build() {
     echo "============== DB Build Specified ============="
     wait_for_databases
     echo "============== Starting DB Build Primary ============="
-    ./build/aware_run.sh sbt -Dmodules=db $SBT_ARGS test
+    ./build/aware_run.sh sbt -J-Dmodules=db $SBT_ARGS test
 }
 
 function js_build() {
@@ -169,28 +169,28 @@ function js_build() {
     show_mem
     export JVM_OPTS="-Dquill.macro.log=false -Dquill.scala.version=$TRAVIS_SCALA_VERSION -Xms1024m -Xmx4g -Xss5m -XX:ReservedCodeCacheSize=256m -XX:+TieredCompilation -XX:+CMSClassUnloadingEnabled -XX:+UseConcMarkSweepGC"
     echo "============== Starting JS Build Primary ============="
-    sbt -Dmodules=js $SBT_ARGS test
+    sbt -J-Dmodules=js $SBT_ARGS test
 }
 
 function async_build() {
     echo "============== Async Build Specified ============="
     wait_for_mysql_postgres
     echo "============== Starting Async Build Primary ============="
-    sbt -Dmodules=async $SBT_ARGS test
+    sbt -J-Dmodules=async $SBT_ARGS test
 }
 
 function codegen_build() {
     echo "============== Codegen Build Specified ============="
     wait_for_databases
     echo "============== Starting Codegen Build Primary ============="
-    sbt -Dmodules=codegen $SBT_ARGS test
+    sbt -J-Dmodules=codegen $SBT_ARGS test
 }
 
 function bigdata_build() {
     echo "============== BigData Build Specified ============="
     wait_for_bigdata
     echo "============== Starting BigData Build Primary ============="
-    sbt -Dmodules=bigdata $SBT_ARGS test
+    sbt -J-Dmodules=bigdata $SBT_ARGS test
 }
 
 function full_build() {
