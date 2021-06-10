@@ -102,9 +102,10 @@ val filteredModules = {
         println("Compiling Scala 2.13 Modules")
         baseModules ++ dbModules ++ jasyncModules
       } else {
-        //println("Compiling All Modules")
-        //allModules
-        throw new IllegalStateException("Tried to build all modules. Not allowed.")
+        println("Compiling All Modules")
+        allModules
+        // Note, can't do this because things like inform (i.e. formatting) actually do run for all modules
+        //throw new IllegalStateException("Tried to build all modules. Not allowed.")
       }
   }
   if(isScala213) {
