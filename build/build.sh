@@ -2,8 +2,6 @@
 
 set -e
 
-echo "Start build modules: $modules"
-
 export POSTGRES_HOST=127.0.0.1
 export POSTGRES_PORT=15432
 
@@ -25,7 +23,7 @@ export ORIENTDB_PORT=12424
 export JVM_OPTS="-Dquill.macro.log=false -Dquill.scala.version=$TRAVIS_SCALA_VERSION -Xms1024m -Xmx3g -Xss5m -XX:ReservedCodeCacheSize=256m -XX:+TieredCompilation -XX:+CMSClassUnloadingEnabled -XX:+UseConcMarkSweepGC"
 
 modules=$1
-
+echo "Start build modules: $modules"
 
 
 function show_mem() {
@@ -160,34 +158,46 @@ function wait_for_bigdata() {
 }
 
 function db_build() {
+    echo "============== DB Build Specified ============="
     wait_for_databases
+    echo "============== Starting DB Build Primary ============="
     ./build/aware_run.sh sbt -Dmodules=db $SBT_ARGS test
 }
 
 function js_build() {
+    echo "============== JS Build Specified ============="
     show_mem
     export JVM_OPTS="-Dquill.macro.log=false -Dquill.scala.version=$TRAVIS_SCALA_VERSION -Xms1024m -Xmx4g -Xss5m -XX:ReservedCodeCacheSize=256m -XX:+TieredCompilation -XX:+CMSClassUnloadingEnabled -XX:+UseConcMarkSweepGC"
+    echo "============== Starting JS Build Primary ============="
     sbt -Dmodules=js $SBT_ARGS test
 }
 
 function async_build() {
+    echo "============== Async Build Specified ============="
     wait_for_mysql_postgres
+    echo "============== Starting Async Build Primary ============="
     sbt -Dmodules=async $SBT_ARGS test
 }
 
 function codegen_build() {
+    echo "============== Codegen Build Specified ============="
     wait_for_databases
+    echo "============== Starting Codegen Build Primary ============="
     sbt -Dmodules=codegen $SBT_ARGS test
 }
 
 function bigdata_build() {
+    echo "============== BigData Build Specified ============="
     wait_for_bigdata
+    echo "============== Starting BigData Build Primary ============="
     sbt -Dmodules=bigdata $SBT_ARGS test
 }
 
 function full_build() {
+    echo "============== Full Build Specified ============="
     wait_for_databases
     wait_for_bigdata
+    echo "============== Starting Full Build Primary ============="
     sbt $SBT_ARGS test
 }
 
