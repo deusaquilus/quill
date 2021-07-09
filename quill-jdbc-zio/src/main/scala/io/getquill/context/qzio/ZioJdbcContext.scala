@@ -245,7 +245,7 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
             // TODO Assuming chunk size is fetch size. Not sure if this is optimal.
             //      Maybe introduce some switches to control this?
             case Some(size) =>
-              chunkedFetch(iter, size)
+              ZStream.fromIterator(iter, size)
             case None =>
               Stream.fromIterator(new ResultSetIterator(rs, extractor))
           }
@@ -274,39 +274,6 @@ abstract class ZioJdbcContext[Dialect <: SqlIdiom, Naming <: NamingStrategy] ext
       }
       builder.result()
     }
-
-  def chunkedFetch[T](iter: ResultSetIterator[T], fetchSize: Int) = {
-    object StreamEnd extends Throwable
-    ZStream.fromEffect(Task(iter) <*> ZIO.runtime[Any]).flatMap {
-      case (it, rt) =>
-        ZStream.repeatEffectChunkOption {
-          Task {
-            val hasNext: Boolean =
-              try it.hasNext
-              catch {
-                case e: Throwable if !rt.platform.fatal(e) =>
-                  throw e
-              }
-            if (hasNext) {
-              try {
-                // The most efficent way to load an array is to allocate a slice that has the number of elements
-                // that will be returned by every database fetch i.e. the fetch size. Since the later iteration
-                // may return fewer elements then that, we need a special guard for that particular scenario.
-                // However, since we do not know which slice is that last, the guard (i.e. hasNext())
-                // needs to be used for all of them.
-                guardedChunkFill(fetchSize)(it.hasNext, it.next())
-              } catch {
-                case e: Throwable if !rt.platform.fatal(e) =>
-                  throw e
-              }
-            } else throw StreamEnd
-          }.mapError {
-            case StreamEnd => None
-            case e         => Some(e)
-          }
-        }
-    }
-  }
 
   override private[getquill] def prepareParams(statement: String, prepare: Prepare): QIO[Seq[String]] = {
     withConnectionWrapped { conn =>

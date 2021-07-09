@@ -3,12 +3,12 @@ package io.getquill.context
 import com.typesafe.config.Config
 import io.getquill.JdbcContextConfig
 import io.getquill.context.qzio.ImplicitSyntax.Implicit
-import zio.{Has, IO, Task, ZIO, ZLayer, ZManaged}
+import zio.{ Has, IO, Task, ZIO, ZLayer, ZManaged }
 import zio.stream.ZStream
-import io.getquill.util.{ContextLogger, LoadConfig}
+import io.getquill.util.{ ContextLogger, LoadConfig }
 
 import java.io.Closeable
-import java.sql.{Connection, SQLException}
+import java.sql.{ Connection, SQLException }
 import javax.sql.DataSource
 
 object ZioJdbc {
